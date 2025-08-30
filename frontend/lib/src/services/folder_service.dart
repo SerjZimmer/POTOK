@@ -31,4 +31,13 @@ class FolderService {
       throw Exception('Failed to create folder');
     }
   }
+
+  Future<void> deleteFolder(String id) async {
+    final response = await http.delete(Uri.parse('$baseUrl/folders/$id'));
+    if (response.statusCode != 204) {
+      print('Error: ${response.statusCode}');
+      print('Response body: ${response.body}');
+      throw Exception('Failed to delete folder');
+    }
+  }
 }

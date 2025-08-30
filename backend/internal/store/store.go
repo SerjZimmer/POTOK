@@ -110,16 +110,9 @@ func (s *Store) ListNotes(folderID string) ([]*models.Note, error) {
 	return notes, nil
 }
 
-func (s *Store) UpdateNote(id, title, content string) (*models.Note, error) {
-	query := `UPDATE notes SET title = ?, content = ? WHERE id = ?`
-	var folderId string
-	selectQuery := `SELECT folder_id FROM notes WHERE id = ?`
-	err := s.db.QueryRow(selectQuery, id).Scan(&folderId)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = s.db.Exec(query, title, content, id)
+func (s *Store) UpdateNote(id, title, content, folderID string) (*models.Note, error) {
+	query := `UPDATE notes SET title = ?, content = ?, folder_id = ? WHERE id = ?`
+	_, err := s.db.Exec(query, title, content, folderID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +121,7 @@ func (s *Store) UpdateNote(id, title, content string) (*models.Note, error) {
 		ID:       id,
 		Title:    title,
 		Content:  content,
-		FolderID: folderId,
+		FolderID: folderID,
 	}
 	return note, nil
 }
@@ -156,4 +149,28 @@ func (s *Store) ListAllNotes() ([]*models.Note, error) {
 		notes = append(notes, &note)
 	}
 	return notes, nil
+}
+
+func (s *Store) DeleteFolderWithNotes(folderID string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() // Rollback on error
+
+	// Delete notes in the folder
+	notesQuery := `DELETE FROM notes WHERE folder_id = ?`
+	_, err = tx.Exec(notesQuery, folderID)
+	if err != nil {
+		return err
+	}
+
+	// Delete the folder
+	folderQuery := `DELETE FROM folders WHERE id = ?`
+	_, err = tx.Exec(folderQuery, folderID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit() // Commit on success
 }

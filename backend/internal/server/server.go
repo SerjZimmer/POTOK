@@ -32,6 +32,7 @@ func (s *Server) configureRoutes() {
 	// Маршруты для Папок
 	s.router.HandleFunc("/folders", s.handleGetFolders()).Methods("GET")
 	s.router.HandleFunc("/folders", s.handleCreateFolder()).Methods("POST")
+	s.router.HandleFunc("/folders/{folderId}", s.handleDeleteFolder()).Methods("DELETE") // New route
 
 	// Маршруты для Заметок
 	s.router.HandleFunc("/folders/{folderId}/notes", s.handleListNotes()).Methods("GET")
@@ -39,6 +40,20 @@ func (s *Server) configureRoutes() {
 	s.router.HandleFunc("/notes", s.handleCreateNote()).Methods("POST")
 	s.router.HandleFunc("/notes/{noteId}", s.handleUpdateNote()).Methods("PUT")
 	s.router.HandleFunc("/notes/{noteId}", s.handleDeleteNote()).Methods("DELETE")
+}
+
+// New handler to delete a folder and its notes
+func (s *Server) handleDeleteFolder() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		folderId := vars["folderId"]
+
+		if err := s.store.DeleteFolderWithNotes(folderId); err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Не удалось удалить папку и заметки")
+			return
+		}
+		respondWithJSON(w, http.StatusNoContent, nil)
+	}
 }
 
 // New handler to list all notes
@@ -124,8 +139,9 @@ func (s *Server) handleCreateNote() http.HandlerFunc {
 
 func (s *Server) handleUpdateNote() http.HandlerFunc {
 	type request struct {
-		Title   string `json:"title"`
-		Content string `json:"content"`
+		Title    string `json:"title"`
+		Content  string `json:"content"`
+		FolderID string `json:"folder_id"` // Added FolderID
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
@@ -137,7 +153,7 @@ func (s *Server) handleUpdateNote() http.HandlerFunc {
 			return
 		}
 
-		note, err := s.store.UpdateNote(noteId, req.Title, req.Content)
+		note, err := s.store.UpdateNote(noteId, req.Title, req.Content, req.FolderID) // Pass FolderID
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "Не удалось обновить заметку")
 			return
