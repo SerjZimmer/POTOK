@@ -14,7 +14,8 @@ class NotesMasterDetailScreen extends StatefulWidget {
 }
 
 class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
-  List<Note> _notes = [];
+  List<Note> _allNotes = []; // All notes for counting
+  List<Note> _displayedNotes = []; // Notes for current view
   final NoteService _noteService = NoteService();
 
   List<Folder> _folders = [];
@@ -33,14 +34,20 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
     super.dispose();
   }
 
-  Future<void> _loadNotes([String? folderId]) async {
+  Future<void> _loadNotes([String? folderId, String? sortBy]) async {
     print('[NotesMasterDetailScreen] _loadNotes Called with folderId: $folderId');
     try {
-      final fetchedNotes = await _noteService.getNotes(folderId);
-      print('[NotesMasterDetailScreen] _loadNotes Fetched ${fetchedNotes.length} notes');
+      // Always fetch all notes to update _allNotes for counting
+      final allFetchedNotes = await _noteService.getNotes(null); // Fetch all notes
       setState(() {
-        _notes = fetchedNotes;
-        print('[NotesMasterDetailScreen] _notes updated. Current count: ${_notes.length}');
+        _allNotes = allFetchedNotes;
+      });
+
+      // Fetch notes for the current view
+      final displayedFetchedNotes = await _noteService.getNotes(folderId, sortBy); // Pass sortBy
+      setState(() {
+        _displayedNotes = displayedFetchedNotes;
+        print('[NotesMasterDetailScreen] _displayedNotes updated. Current count: ${_displayedNotes.length}');
       });
     } catch (e) {
       print('[NotesMasterDetailScreen] Перехвачена ошибка: $e');
@@ -53,9 +60,15 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
       setState(() {
         _folders = fetchedFolders;
       });
+      // After loading folders, ensure all notes are loaded to update counts
+      await _loadNotes(); // Load all notes
     } catch (e) {
       print('[NotesMasterDetailScreen] Перехвачена ошибка при загрузке папок: $e');
     }
+  }
+
+  int _getNoteCountForFolder(String folderId) {
+    return _allNotes.where((note) => note.folderId == folderId).length;
   }
 
   Future<void> _addNote() async {
@@ -152,6 +165,136 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
     }
   }
 
+  void _showFolderOptionsMenu(BuildContext context, Folder folder) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext bc) {
+        return SafeArea(
+          child: Wrap(
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.edit, color: Colors.amber),
+                title: const Text('Переименовать папку', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(bc); // Close bottom sheet
+                  _renameFolder(folder);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.amber),
+                title: const Text('Удалить папку', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(bc); // Close bottom sheet
+                  _confirmDeleteFolder(context, folder); // Re-use existing delete logic
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.sort, color: Colors.amber),
+                title: const Text('Сортировать заметки', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(bc); // Close bottom sheet
+                  _sortNotesInFolder(folder);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _confirmDeleteFolder(BuildContext context, Folder folder) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Удалить папку?'),
+          content: Text('Вы уверены, что хотите удалить папку "${folder.name}" и все заметки в ней?'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Отмена'),
+              onPressed: () {
+                Navigator.of(context).pop(); // Dismiss dialog
+              },
+            ),
+            TextButton(
+              child: const Text('Удалить', style: TextStyle(color: Colors.amber)),
+              onPressed: () async {
+                Navigator.of(context).pop(); // Dismiss dialog
+                try {
+                  await _folderService.deleteFolder(folder.id);
+                  if (_selectedFolderId == folder.id) { // If the deleted folder was selected
+                    setState(() {
+                      _selectedFolderId = null; // Reset selection
+                    });
+                  }
+                  _loadFolders(); // Refresh folder list
+                  _loadNotes(); // Refresh notes list (in case current folder was deleted)
+                } catch (e) {
+                  print('[NotesMasterDetailScreen] Ошибка при удалении папки: $e');
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _renameFolder(Folder folder) async {
+    String? newFolderName = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        String currentFolderName = folder.name;
+        return AlertDialog(
+          title: const Text('Переименовать папку'),
+          content: TextField(
+            controller: TextEditingController(text: currentFolderName),
+            onChanged: (value) {
+              currentFolderName = value;
+            },
+            decoration: const InputDecoration(hintText: 'Новое название папки'),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Отмена'),
+              onPressed: () {
+                Navigator.pop(context);
+              },
+            ),
+            TextButton(
+              child: const Text('Переименовать'),
+              onPressed: () {
+                Navigator.pop(context, currentFolderName);
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    if (newFolderName != null && newFolderName.isNotEmpty && newFolderName != folder.name) {
+      try {
+        // Assuming FolderService has an updateFolder method
+        // You might need to implement this in folder_service.dart and backend
+        // For now, we'll just update locally and reload
+        await _folderService.updateFolder(folder.id, newFolderName); // This method needs to be implemented
+        _loadFolders(); // Refresh folder list
+      } catch (e) {
+        print('[NotesMasterDetailScreen] Ошибка при переименовании папки: $e');
+      }
+    }
+  }
+
+  void _sortNotesInFolder(Folder folder) {
+    // Implement sorting logic here
+    // This could involve showing a dialog for sort options (e.g., by title, by date)
+    // and then re-loading notes with a specific sort order. 
+    print('[NotesMasterDetailScreen] Сортировка заметок в папке: ${folder.name}');
+    // For now, just re-load notes to reflect any potential changes if sorting was implemented
+    _loadNotes(folder.id);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -175,7 +318,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
               children: <Widget>[
                 ListTile(
                   leading: const Icon(Icons.folder_open, color: Colors.amber),
-                  title: const Text('Все заметки', style: TextStyle(fontSize: 16)),
+                  title: Text('Все заметки (${_allNotes.length})', style: const TextStyle(fontSize: 16)),
                   onTap: () {
                     setState(() {
                       _selectedFolderId = null;
@@ -186,46 +329,19 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                 const Divider(),
                 ..._folders.map((folder) => ListTile(
                   leading: const Icon(Icons.folder, color: Colors.amber),
-                  title: Text(folder.name, style: const TextStyle(fontSize: 16)),
-                  trailing: IconButton( // Added delete icon
-                    icon: const Icon(Icons.delete, color: Colors.amber),
+                  title: Text('${folder.name} (${_getNoteCountForFolder(folder.id)})', style: const TextStyle(fontSize: 16)),
+                  trailing: IconButton( // Options icon
+                    icon: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[700], // Background for the circle
+                        shape: BoxShape.circle,
+                      ),
+                      padding: const EdgeInsets.all(4.0),
+                      child: const Icon(Icons.more_horiz, color: Colors.amber), // Ellipsis icon
+                    ),
                     onPressed: () {
-                      // Show confirmation dialog before deleting
-                      showDialog(
-                        context: context,
-                        builder: (BuildContext context) {
-                          return AlertDialog(
-                            title: const Text('Удалить папку?'),
-                            content: Text('Вы уверены, что хотите удалить папку "${folder.name}" и все заметки в ней?'),
-                            actions: <Widget>[
-                              TextButton(
-                                child: const Text('Отмена'),
-                                onPressed: () {
-                                  Navigator.of(context).pop(); // Dismiss dialog
-                                },
-                              ),
-                              TextButton(
-                                child: const Text('Удалить', style: TextStyle(color: Colors.amber)),
-                                onPressed: () async {
-                                  Navigator.of(context).pop(); // Dismiss dialog
-                                  try {
-                                    await _folderService.deleteFolder(folder.id);
-                                    if (_selectedFolderId == folder.id) { // If the deleted folder was selected
-                                      setState(() {
-                                        _selectedFolderId = null; // Reset selection
-                                      });
-                                    }
-                                    _loadFolders(); // Refresh folder list
-                                    _loadNotes(); // Refresh notes list (in case current folder was deleted)
-                                  } catch (e) {
-                                    print('[NotesMasterDetailScreen] Ошибка при удалении папки: $e');
-                                  }
-                                },
-                              ),
-                            ],
-                          );
-                        },
-                      );
+                      // Show options menu
+                      _showFolderOptionsMenu(context, folder);
                     },
                   ),
                   onTap: () {
@@ -262,7 +378,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                   shape: const CircleBorder(),
                   child: const Icon(Icons.note_add), // Changed icon to note_add
                 ),
-                body: _notes.isEmpty
+                body: _displayedNotes.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -297,10 +413,10 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                         ),
                       )
                     : ListView.builder(
-                        key: ValueKey(_notes.length.toString() + (_selectedFolderId ?? '')), // Keep this key
-                        itemCount: _notes.length,
+                        key: ValueKey(_displayedNotes.length.toString() + (_selectedFolderId ?? '')), // Keep this key
+                        itemCount: _displayedNotes.length,
                         itemBuilder: (context, index) {
-                          final note = _notes[index];
+                          final note = _displayedNotes[index];
                           return Dismissible(
                             key: ValueKey(note.id),
                             direction: DismissDirection.endToStart,
@@ -313,10 +429,12 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                             onDismissed: (direction) async {
                               final deletedNoteId = note.id;
                               setState(() {
-                                _notes.removeWhere((n) => n.id == deletedNoteId); // Remove from local list immediately
+                                _displayedNotes.removeWhere((n) => n.id == deletedNoteId); // Remove from local list immediately
                               });
                               try {
                                 await _noteService.deleteNote(deletedNoteId); // Delete from backend
+                                await _loadNotes(); // Refresh all notes to update counts
+                                await _loadFolders(); // Refresh folders to update counts in UI
                               } catch (e) {
                                 print('[NotesMasterDetailScreen] Ошибка при удалении заметки: $e');
                               }

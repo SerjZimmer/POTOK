@@ -63,9 +63,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         title: Text(widget.note == null ? 'Новая заметка' : 'Редактировать', style: const TextStyle(color: Colors.black, fontSize: 17, fontWeight: FontWeight.w600)),
         // Добавляем кнопку сохранения на панель приложения.
         actions: [
-          TextButton(
+          IconButton(
+            icon: const Icon(Icons.save, color: Colors.amber), // Save icon
             onPressed: _saveNote, // При нажатии вызываем метод _saveNote.
-            child: const Text('Сохранить', style: TextStyle(color: Colors.blueAccent, fontSize: 17, fontWeight: FontWeight.bold)),
           ),
           if (widget.note != null) // Only show delete button for existing notes
             IconButton(

@@ -32,6 +32,21 @@ class FolderService {
     }
   }
 
+  Future<Folder> updateFolder(String id, String newName) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/folders/$id'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'name': newName}),
+    );
+    if (response.statusCode == 200) {
+      return Folder.fromJson(json.decode(response.body));
+    } else {
+      print('Error: ${response.statusCode}');
+      print('Response body: ${response.body}');
+      throw Exception('Failed to update folder');
+    }
+  }
+
   Future<void> deleteFolder(String id) async {
     final response = await http.delete(Uri.parse('$baseUrl/folders/$id'));
     if (response.statusCode != 204) {
