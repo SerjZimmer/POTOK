@@ -168,13 +168,13 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
           Container(
             width: 300, // Fixed width for the folder list
             decoration: BoxDecoration(
-              color: Colors.grey[50], // Light grey background
+              color: Colors.grey[800], // Darker grey background for folders
               border: Border(right: BorderSide(color: Colors.grey[300]!, width: 0.5)), // Subtle right border
             ),
             child: ListView(
               children: <Widget>[
                 ListTile(
-                  leading: const Icon(Icons.folder_open, color: Colors.blueAccent),
+                  leading: const Icon(Icons.folder_open, color: Colors.amber),
                   title: const Text('Все заметки', style: TextStyle(fontSize: 16)),
                   onTap: () {
                     setState(() {
@@ -185,10 +185,10 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                 ),
                 const Divider(),
                 ..._folders.map((folder) => ListTile(
-                  leading: const Icon(Icons.folder, color: Colors.blueAccent),
+                  leading: const Icon(Icons.folder, color: Colors.amber),
                   title: Text(folder.name, style: const TextStyle(fontSize: 16)),
                   trailing: IconButton( // Added delete icon
-                    icon: const Icon(Icons.delete, color: Colors.redAccent),
+                    icon: const Icon(Icons.delete, color: Colors.amber),
                     onPressed: () {
                       // Show confirmation dialog before deleting
                       showDialog(
@@ -205,7 +205,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                                 },
                               ),
                               TextButton(
-                                child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+                                child: const Text('Удалить', style: TextStyle(color: Colors.amber)),
                                 onPressed: () async {
                                   Navigator.of(context).pop(); // Dismiss dialog
                                   try {
@@ -236,7 +236,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                   },
                 )).toList(),
                 ListTile(
-                  leading: const Icon(Icons.create_new_folder, color: Colors.blueAccent),
+                  leading: const Icon(Icons.create_new_folder, color: Colors.amber),
                   title: const Text('Создать новую папку', style: TextStyle(fontSize: 16)),
                   onTap: () {
                     _showCreateFolderDialog();
@@ -250,14 +250,15 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
           // Right Panel: Notes
           Expanded(
             child: Container( // Wrap in Container for background/shadow
-              color: Colors.white, // White background for notes list
+              color: Colors.grey[700], // Lighter gray background for notes list (same as scaffold)
               child: Scaffold(
+                backgroundColor: Colors.grey[700], // Set background to match container
                 key: ValueKey(_selectedFolderId ?? 'all_notes'), // Add a key to the Scaffold
                 floatingActionButton: FloatingActionButton(
                   onPressed: _addNote,
                   tooltip: 'Новая заметка',
-                  backgroundColor: Colors.blueAccent, // iOS-like blue
-                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.amber, // Gold background
+                  foregroundColor: Colors.black, // Black icon
                   shape: const CircleBorder(),
                   child: const Icon(Icons.note_add), // Changed icon to note_add
                 ),
@@ -268,13 +269,27 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                           children: [
                             const Text(
                               'Здесь пока нет заметок.',
-                              style: TextStyle(fontSize: 18, color: Colors.grey),
+                              style: TextStyle(fontSize: 18, color: Colors.white),
+                            ),
+                            const SizedBox(height: 20),
+                            ElevatedButton.icon(
+                              onPressed: _addNote,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.amber, // Gold background
+                                foregroundColor: Colors.black, // Black text/icon
+                              ),
+                              icon: const Icon(Icons.add),
+                              label: const Text('Создать заметку'),
                             ),
                             if (_selectedFolderId == null) // Only show "Create Folder" if "All Notes" is selected
                               const SizedBox(height: 10),
                             if (_selectedFolderId == null) // Only show "Create Folder" if "All Notes" is selected
                               ElevatedButton.icon(
                                 onPressed: _showCreateFolderDialog,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.amber, // Gold background
+                                  foregroundColor: Colors.black, // Black text/icon
+                                ),
                                 icon: const Icon(Icons.create_new_folder),
                                 label: const Text('Создать папку'),
                               ),
@@ -307,10 +322,11 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                               }
                             },
                             child: ListTile(
+                              tileColor: Colors.grey[700], // Set tile background color (same as scaffold)
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                               title: Text(note.title, style: const TextStyle(fontWeight: FontWeight.w500)),
-                              subtitle: Text(note.content, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.grey)),
-                              trailing: const Icon(Icons.arrow_forward_ios, size: 16.0, color: Colors.grey),
+                              subtitle: Text(note.content, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white)),
+                              trailing: const Icon(Icons.arrow_forward_ios, size: 16.0, color: Colors.amber),
                               onTap: () {
                                 _updateNote(note);
                               },
