@@ -60,8 +60,8 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
       setState(() {
         _folders = fetchedFolders;
       });
-      // After loading folders, ensure all notes are loaded to update counts
-      await _loadNotes(); // Load all notes
+      // After loading folders, reload notes for the current selection to update counts
+      await _loadNotes(_selectedFolderId);
     } catch (e) {
       print('[NotesMasterDetailScreen] Перехвачена ошибка при загрузке папок: $e');
     }
@@ -228,8 +228,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                       _selectedFolderId = null; // Reset selection
                     });
                   }
-                  _loadFolders(); // Refresh folder list
-                  _loadNotes(); // Refresh notes list (in case current folder was deleted)
+                  _loadFolders(); // Refresh folder list (will also refresh notes for current selection)
                 } catch (e) {
                   print('[NotesMasterDetailScreen] Ошибка при удалении папки: $e');
                 }
@@ -433,8 +432,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                               });
                               try {
                                 await _noteService.deleteNote(deletedNoteId); // Delete from backend
-                                await _loadNotes(); // Refresh all notes to update counts
-                                await _loadFolders(); // Refresh folders to update counts in UI
+                                await _loadFolders(); // Refresh folders; will also refresh notes for current selection
                               } catch (e) {
                                 print('[NotesMasterDetailScreen] Ошибка при удалении заметки: $e');
                               }

@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:frontend/src/models/note.dart';
 
 class NoteService {
-  final String baseUrl = 'localhost:8080'; // Base URL of your Go backend (host:port)
+  final String baseUrl = 'http://localhost:8080'; // Base URL of your Go backend
 
   Future<List<Note>> getNotes([String? folderId, String? sortBy]) async {
     String path;
@@ -19,7 +19,9 @@ class NoteService {
       queryParams['sort_by'] = sortBy;
     }
 
-    final uri = Uri.http('localhost:8080', path, queryParams);
+    final uri = Uri.parse('$baseUrl$path').replace(
+      queryParameters: queryParams.isEmpty ? null : queryParams,
+    );
     final response = await http.get(uri);
     if (response.statusCode == 200) {
       print('Response body (getNotes): ${response.body}');
