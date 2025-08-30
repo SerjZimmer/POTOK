@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"log/slog"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -10,9 +11,9 @@ import (
 func InitDB(filepath string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", filepath)
 	if err != nil {
+		slog.Error("DB: Ошибка при открытии базы данных", "error", err)
 		return nil, err
 	}
-
 	// Создаем таблицу для папок
 	foldersQuery := `
 	CREATE TABLE IF NOT EXISTS folders (
@@ -21,6 +22,7 @@ func InitDB(filepath string) (*sql.DB, error) {
 	);`
 	_, err = db.Exec(foldersQuery)
 	if err != nil {
+		slog.Error("DB: Ошибка при создании таблицы 'folders': %v", "error", err)
 		return nil, err
 	}
 
@@ -42,8 +44,9 @@ func InitDB(filepath string) (*sql.DB, error) {
 
 	_, err = db.Exec(notesQuery)
 	if err != nil {
+		slog.Error("DB: Ошибка при создании таблицы 'notes': %v", "error", err)
 		return nil, err
 	}
-
+	slog.Info("DB: Инициализация базы данных завершена успешно.")
 	return db, nil
 }
