@@ -12,6 +12,22 @@
 
 Ограничения: нет Drift/FTS5, нет Riverpod, нет уведомлений/TZ, нет онлайн‑синхронизации, нет drag‑create/resize, нет раскладки перекрытий.
 
+Как это работает сейчас (разделение ответственности)
+
+- Фронтенд (Flutter)
+  - Экран «Календарь» содержит только UI/навигацию между представлениями (Месяц/Неделя/3‑Дня/День/Список).
+  - Для загрузки событий вызывает серверный `GET /v1/events/expand` с окном времени (например, видимые 5–6 недель месяца или 7 дней недели, 1 день и т. п.).
+  - Для CRUD и операций над серией вызывает REST:
+    - POST/GET/PATCH/DELETE `/v1/events` — базовые сущности.
+    - POST `/v1/events/{uid}:apply` — `action=update|delete`, `scope=this|following|series`, `recurrenceId`, `patch`.
+  - Фронт НЕ разворачивает RRULE и НЕ управляет EXDATE/override: только отправляет команды и отрисовывает полученные инстансы.
+
+- Бэкенд (Go, SQLite)
+  - Серверная экспансия RRULE (DAILY/WEEKLY/MONTHLY/YEARLY, INTERVAL, BYDAY/позиционный BYDAY, BYMONTHDAY, BYMONTH, COUNT/UNTIL), учет EXDATE и подмена override‑инстансов.
+  - Серверные операции над сериями: delete/this (EXDATE), delete/following (split RRULE, удаление хвоста override’ов), update/this (override), update/following (split+новая серия), update/series (PATCH).
+  - Все времена в UTC (RFC3339). Окно — полуинтервал [start,end).
+  - Хранение: таблицы calendars/events/event_overrides/event_exdates; индексы под expand/apply.
+
 ---
 
 ## 1. Ближайшие офлайн‑шаги (Drift + Riverpod)
@@ -145,4 +161,3 @@
 - Конфликты при синке: предусмотреть политику для каждой сущности, лог аудита для разборов.
 - Масштабируемость: раннее проектирование партиций и индексов, нагрузочные тесты до релиза.
 - TZ/All‑day: строгие правила интерпретации (локальная TZ календаря), тестовые наборы переходов.
-

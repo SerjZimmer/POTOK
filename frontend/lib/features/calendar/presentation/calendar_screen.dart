@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../data/file_repository.dart';
+import '../data/api_repository.dart';
 import '../domain/entities.dart';
 import 'event_editor.dart';
 import 'day_schedule.dart';
@@ -20,14 +20,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
   CalendarView _view = CalendarView.month;
   DateTime _visibleMonth = _monthStart(DateTime.now());
   DateTime _focusDay = DateTime.now();
-  final FileCalendarRepository _repo = FileCalendarRepository();
+  final ApiCalendarRepository _repo = ApiCalendarRepository();
   List<EventEntity> _events = [];
   bool _loading = true;
+  List<CalendarEntity> _calendars = [];
 
   @override
   void initState() {
     super.initState();
     _reloadMonthEvents();
+    _reloadCalendars();
   }
 
   @override
@@ -57,6 +59,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
               _item('Список', CalendarView.agenda),
             ],
           ),
+          IconButton(
+            tooltip: 'Календари',
+            icon: const Icon(Icons.palette, color: Colors.amber),
+            onPressed: () async {
+              await showDialog(context: context, builder: (_) => _ManageCalendarsDialog(repo: _repo));
+              await _reloadCalendars();
+            },
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -82,6 +92,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         return _MonthView(
           month: _visibleMonth,
           events: _events,
+          calendars: _calendars,
           onTapDay: (day) async {
             await Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => DaySchedulePage(day: day, repo: _repo)),
@@ -190,21 +201,30 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _reloadMonthEvents() async {
-    // Load events for the full 6x7 grid window (includes spillover days
-    // from previous/next months) so leading/trailing days show their events.
+    // Рассчитываем сетку месяца с динамическим числом недель (5 или 6)
     final localFirst = DateTime(_visibleMonth.year, _visibleMonth.month, 1);
     final leading = (localFirst.weekday + 6) % 7; // Mon=0..Sun=6
     final gridStartLocal = localFirst.subtract(Duration(days: leading));
-    final gridEndLocal = gridStartLocal.add(const Duration(days: 42));
+    final daysInMonth = DateTime(_visibleMonth.year, _visibleMonth.month + 1, 0).day;
+    final totalCells = (((leading + daysInMonth) + 6) ~/ 7) * 7; // 35 или 42
+    final gridEndLocal = gridStartLocal.add(Duration(days: totalCells)); // эксклюзивная граница
     final start = gridStartLocal.toUtc();
-    final end = gridEndLocal.toUtc();
-    final res = await _repo.eventsInRange(start, end);
+    final end = gridEndLocal.toUtc(); // expand использует полуинтервал [start,end)
+    final res = await _repo.expand(start, end);
     if (!mounted) return;
     setState(() { _events = res; _loading = false; });
   }
 
+  Future<void> _reloadCalendars() async {
+    try {
+      final list = await _repo.listCalendars();
+      if (!mounted) return;
+      setState(() { _calendars = list; });
+    } catch (_) {}
+  }
+
   Future<void> _reloadRange(DateTime startLocal, DateTime endLocal) async {
-    final res = await _repo.eventsInRange(startLocal.toUtc(), endLocal.toUtc());
+    final res = await _repo.expand(startLocal.toUtc(), endLocal.toUtc());
     if (!mounted) return;
     setState(() { _events = res; _loading = false; });
   }
@@ -308,7 +328,8 @@ class _MonthView extends StatelessWidget {
   final void Function(DateTime day)? onTapDay;
   final void Function(DateTime day)? onLongPressDay;
   final List<EventEntity> events;
-  const _MonthView({required this.month, this.onTapDay, this.onLongPressDay, required this.events});
+  final List<CalendarEntity> calendars;
+  const _MonthView({required this.month, this.onTapDay, this.onLongPressDay, required this.events, required this.calendars});
 
   @override
   Widget build(BuildContext context) {
@@ -317,7 +338,7 @@ class _MonthView extends StatelessWidget {
     final firstWeekday = firstOfMonth.weekday; // 1..7
     final leading = (firstWeekday + 6) % 7; // 0 for Monday, 6 for Sunday
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-    final totalCells = 42; // 6 weeks grid
+    final totalCells = (((leading + daysInMonth) + 6) ~/ 7) * 7; // 35 или 42
 
     final startDate = firstOfMonth.subtract(Duration(days: leading));
     final today = DateTime.now();
@@ -346,12 +367,24 @@ class _MonthView extends StatelessWidget {
                 color: inMonth ? Colors.white : Colors.white70.withOpacity(0.5),
                 fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
               );
-              final dayEvents = events.where((e) {
+              // Отберём инстансы для этой календарной даты и удалим возможные дубляжи
+              final raw = events.where((e) {
                 final d = DateTime(day.year, day.month, day.day);
                 final startDay = DateTime(e.startUtc.toLocal().year, e.startUtc.toLocal().month, e.startUtc.toLocal().day);
                 final endDay = DateTime(e.endUtc.toLocal().year, e.endUtc.toLocal().month, e.endUtc.toLocal().day);
                 return !d.isBefore(startDay) && !d.isAfter(endDay);
-              }).toList();
+              });
+              final seen = <String>{};
+              final dayEvents = <EventEntity>[];
+              for (final e in raw) {
+                final key = '${e.calendarUid}|${e.parentUid ?? e.uid}|${e.recurrenceId ?? e.startUtc.toIso8601String()}';
+                if (seen.add(key)) dayEvents.add(e);
+              }
+              Color pillColor(String calUid){
+                final c = calendars.where((x)=>x.uid==calUid).cast<CalendarEntity?>().firstWhere((x)=>x!=null, orElse: ()=>null);
+                if(c==null) return Colors.amber.withOpacity(0.25);
+                return _hexColor(c.colorHex).withOpacity(0.25);
+              }
               return InkWell(
                 onTap: onTapDay == null ? null : () => onTapDay!(day),
                 onLongPress: onLongPressDay == null ? null : () => onLongPressDay!(day),
@@ -371,7 +404,7 @@ class _MonthView extends StatelessWidget {
                           child: Text('${day.day}', style: textStyle),
                         ),
                         const SizedBox(height: 2),
-                        ...dayEvents.take(3).map((e) => _EventPill(title: e.title)),
+                        ...dayEvents.take(3).map((e) => _EventPill(title: e.title, color: pillColor(e.calendarUid))),
                         if (dayEvents.length > 3)
                           Text('+${dayEvents.length - 3}', style: const TextStyle(fontSize: 10, color: Colors.white70)),
                       ],
@@ -578,21 +611,135 @@ class _AgendaListView extends StatelessWidget {
   }
 }
 
+class _ManageCalendarsDialog extends StatefulWidget {
+  final ApiCalendarRepository repo;
+  const _ManageCalendarsDialog({required this.repo});
+  @override
+  State<_ManageCalendarsDialog> createState() => _ManageCalendarsDialogState();
+}
+
+class _ManageCalendarsDialogState extends State<_ManageCalendarsDialog> {
+  List<CalendarEntity> _items = [];
+  final _colors = [
+    '#FFC107','#FF5722','#E91E63','#9C27B0','#3F51B5','#2196F3','#00BCD4','#009688','#4CAF50','#8BC34A','#CDDC39','#FF9800',
+  ];
+
+  @override
+  void initState(){ super.initState(); _load(); }
+  Future<void> _load() async { final list = await widget.repo.listCalendars(); if(mounted) setState(()=>_items=list); }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Календари'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final c in _items)
+              ListTile(
+                leading: Container(width:18,height:18,decoration: BoxDecoration(color: _hexColor(c.colorHex), shape: BoxShape.circle)),
+                title: Text(c.name),
+                trailing: IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.amber),
+                  onPressed: () async { await _edit(c); await _load(); },
+                ),
+              ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ElevatedButton.icon(
+                onPressed: () async { await _create(); await _load(); },
+                icon: const Icon(Icons.add),
+                label: const Text('Создать календарь'),
+              ),
+            )
+          ],
+        ),
+      ),
+      actions: [ TextButton(onPressed: ()=>Navigator.of(context).pop(), child: const Text('Закрыть')) ],
+    );
+  }
+
+  Future<void> _create() async {
+    String name = '';
+    String color = _colors.first;
+    final ok = await showDialog<bool>(context: context, builder: (_){
+      return _CalendarEditDialog(title: 'Новый календарь', name: name, colorHex: color, colors: _colors,
+        onChanged: (n,c){ name=n; color=c; });
+    });
+    if(ok==true && name.trim().isNotEmpty){ await widget.repo.createCalendar(name.trim(), colorHex: color); }
+  }
+  Future<void> _edit(CalendarEntity c) async {
+    String name = c.name; String color = c.colorHex;
+    final ok = await showDialog<bool>(context: context, builder: (_){
+      return _CalendarEditDialog(title: 'Редактировать календарь', name: name, colorHex: color, colors: _colors,
+        onChanged: (n,col){ name=n; color=col; });
+    });
+    if(ok==true && name.trim().isNotEmpty){ await widget.repo.updateCalendar(c.uid, name: name.trim(), colorHex: color); }
+  }
+}
+
+class _CalendarEditDialog extends StatefulWidget{
+  final String title; final String name; final String colorHex; final List<String> colors; final void Function(String,String) onChanged;
+  const _CalendarEditDialog({required this.title, required this.name, required this.colorHex, required this.colors, required this.onChanged});
+  @override State<_CalendarEditDialog> createState()=>_CalendarEditDialogState();
+}
+class _CalendarEditDialogState extends State<_CalendarEditDialog>{
+  late TextEditingController _ctrl; late String _color;
+  @override void initState(){ super.initState(); _ctrl=TextEditingController(text: widget.name); _color=widget.colorHex; }
+  @override Widget build(BuildContext context){
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(controller: _ctrl, decoration: const InputDecoration(labelText: 'Название')), const SizedBox(height: 12),
+            const Text('Цвет'), const SizedBox(height: 6),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for(final h in widget.colors)
+                GestureDetector(onTap: ()=> setState(()=>_color=h), child: Container(
+                  width: 26, height: 26,
+                  decoration: BoxDecoration(color: _hexColor(h), shape: BoxShape.circle, border: Border.all(color: _color==h? Colors.white: Colors.transparent, width: 2)),
+                )),
+            ]),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: ()=> Navigator.of(context).pop(false), child: const Text('Отмена')),
+        ElevatedButton(onPressed: (){ widget.onChanged(_ctrl.text, _color); Navigator.of(context).pop(true); }, child: const Text('Сохранить')),
+      ],
+    );
+  }
+}
+
 class _EventPill extends StatelessWidget {
   final String title;
-  const _EventPill({required this.title});
+  final Color color;
+  const _EventPill({required this.title, this.color = const Color(0x80FFC107)});
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(top: 2),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.amber.withOpacity(0.25),
+        color: color,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
     );
   }
+}
+
+Color _hexColor(String hex){
+  var h = hex.replaceAll('#','');
+  if(h.length==6) h='FF$h';
+  return Color(int.parse(h, radix:16));
 }
 
 class _WeekPlaceholder extends StatelessWidget {

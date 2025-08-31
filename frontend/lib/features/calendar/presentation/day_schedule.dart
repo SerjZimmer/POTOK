@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../data/file_repository.dart';
+import '../data/api_repository.dart';
 import '../domain/entities.dart';
 import 'event_editor.dart';
 
@@ -8,7 +8,7 @@ import 'event_editor.dart';
 /// список перезагружается, чтобы изменения были видны сразу.
 class DaySchedulePage extends StatefulWidget {
   final DateTime day;
-  final FileCalendarRepository repo;
+  final ApiCalendarRepository repo;
   const DaySchedulePage({super.key, required this.day, required this.repo});
 
   @override
@@ -17,21 +17,32 @@ class DaySchedulePage extends StatefulWidget {
 
 class _DaySchedulePageState extends State<DaySchedulePage> {
   late Future<List<EventEntity>> _future;
+  List<CalendarEntity> _calendars = [];
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    _loadCalendars();
   }
 
   Future<List<EventEntity>> _load() {
-    final start = DateTime(widget.day.year, widget.day.month, widget.day.day).toUtc();
-    final end = start.add(const Duration(days: 1));
-    return widget.repo.eventsInRange(start, end);
+    // Для корректного отображения многодневных событий берём небольшое окно
+    // «назад» и далее фильтруем по пересечению суток.
+    const lookbackDays = 7;
+    final startLocal = DateTime(widget.day.year, widget.day.month, widget.day.day);
+    final start = startLocal.subtract(const Duration(days: lookbackDays)).toUtc();
+    final end = startLocal.add(const Duration(days: 1)).toUtc();
+    return widget.repo.expand(start, end);
   }
 
   Future<void> _reload() async {
     setState(() { _future = _load(); });
+    try { final cals = await widget.repo.listCalendars(); if(mounted) setState(()=> _calendars = cals); } catch(_){ }
+  }
+
+  Future<void> _loadCalendars() async {
+    try { final cals = await widget.repo.listCalendars(); if(mounted) setState(()=> _calendars = cals); } catch(_){ }
   }
 
   @override
@@ -46,7 +57,17 @@ class _DaySchedulePageState extends State<DaySchedulePage> {
           }
           // Сортируем события по времени начала; развёрнутые повторения уже
           // находятся в диапазоне [день, день+1).
-          final items = (snap.data ?? const <EventEntity>[])..sort((a,b)=>a.startUtc.compareTo(b.startUtc));
+          final all = (snap.data ?? const <EventEntity>[]);
+          // Фильтрация по пересечению с текущими сутками (локально)
+          final dayStartLocal = DateTime(widget.day.year, widget.day.month, widget.day.day);
+          final dayEndLocal = dayStartLocal.add(const Duration(days: 1));
+          bool overlaps(EventEntity e){
+            final s = e.startUtc.toLocal();
+            final en = e.endUtc.toLocal();
+            return s.isBefore(dayEndLocal) && en.isAfter(dayStartLocal);
+          }
+          final items = all.where(overlaps).toList()
+            ..sort((a,b)=>a.startUtc.compareTo(b.startUtc));
           if (items.isEmpty) {
             return const Center(child: Text('Нет событий'));
           }
@@ -67,7 +88,7 @@ class _DaySchedulePageState extends State<DaySchedulePage> {
                   child: ListTile(
                     title: Text(e.title),
                     subtitle: Text(_timeRange(e)),
-                    leading: const Icon(Icons.event, color: Colors.amber),
+                    leading: Container(width: 14, height: 14, decoration: BoxDecoration(color: _calColor(e.calendarUid), shape: BoxShape.circle)),
                     onTap: () async {
                       final saved = await Navigator.of(context).push<bool>(
                         MaterialPageRoute(builder: (_) => EventEditorPage(event: e, repo: widget.repo)),
@@ -107,4 +128,16 @@ class _DaySchedulePageState extends State<DaySchedulePage> {
     if (e.isAllDay) return 'Весь день';
     return '${fmt(e.startUtc)} – ${fmt(e.endUtc)}';
   }
+  Color _calColor(String uid){
+    final c = _calendars.where((x)=>x.uid==uid).cast<CalendarEntity?>().firstWhere((x)=>x!=null, orElse: ()=>null);
+    if(c==null) return Colors.amber;
+    return _hexColor(c.colorHex);
+  }
+}
+
+// Хелпер: перевод HEX (#RRGGBB или #AARRGGBB) в Color
+Color _hexColor(String hex){
+  var h = hex.replaceAll('#','');
+  if(h.length==6) h='FF$h';
+  return Color(int.parse(h, radix:16));
 }

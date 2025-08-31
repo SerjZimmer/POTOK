@@ -8,6 +8,7 @@ import (
     "github.com/gorilla/mux"
     "potok/backend/internal/store"
     calhttp "potok/backend/internal/calendar/http"
+    calsvc "potok/backend/internal/calendar/service"
 )
 
 // Server содержит зависимости для HTTP-сервера, такие как роутер и хранилище.
@@ -46,8 +47,14 @@ func (s *Server) configureRoutes() {
     s.router.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }).Methods("GET")
     s.router.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }).Methods("GET")
 
-    // Calendar API (chi router mounted under /v1)
-    s.router.PathPrefix("/v1").Handler(calhttp.NewRouter())
+    // Calendar API (chi router mounted under /v1) — используем SQLite‑сервисы
+    calRouter := calhttp.NewRouterWithServices(
+        calsvc.NewSQLiteCalendarService(s.store.DB()),
+        calsvc.NewSQLiteEventService(s.store.DB()),
+        calsvc.NoopReminderService{},
+        calsvc.NoopSyncService{},
+    )
+    s.router.PathPrefix("/v1").Handler(calRouter)
 }
 
 // New handler to delete a folder and its notes
