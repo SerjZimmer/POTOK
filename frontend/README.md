@@ -1,16 +1,21 @@
-# frontend
+# POTOK — Frontend
 
-A new Flutter project.
+Flutter 3.x приложение (Dark theme). Модуль «Заметки» + «Календарь» (MVP офлайн‑первый).
 
-## Getting Started
+## Запуск
 
-This project is a starting point for a Flutter application.
+1) Backend: `make run-backend`
+2) Frontend: `cd frontend && make run` (или `flutter run -d chrome`)
 
-A few resources to get you started if this is your first Flutter project:
+## Календарь (MVP)
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- Bottom Navigation: переключение между «Заметками» и «Календарём».
+- Экран календаря: заглушки для представлений Month/Week/3-Day/Day/Agenda, согласованные с текущей темой.
+- Data-слой (заготовка): `lib/features/calendar/data/repository.dart` — интерфейсы для Drift/FTS5, soft-delete и напоминаний.
+- RRULE сервис: `lib/features/calendar/services/rrule_service.dart` — прототип API (парсинг/сборка/экспансия).
+- Тесты: `test/calendar_rrule_test.dart`.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Следующие шаги
+
+- Добавить зависимости (flutter_riverpod, drift, timezone, flutter_local_notifications, dio/openapi client) в `pubspec.yaml` и реализовать репозитории и изоляты.
+- Сгенерировать REST‑клиент из `openapi/calendar.yaml` (dart‑dio). Пока сеть не используется, интерфейсы зафиксированы.

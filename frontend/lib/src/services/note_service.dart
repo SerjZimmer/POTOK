@@ -5,14 +5,24 @@ import 'package:frontend/src/models/note.dart';
 class NoteService {
   final String baseUrl = 'http://localhost:8080'; // Base URL of your Go backend
 
-  Future<List<Note>> getNotes([String? folderId]) async {
-    String url;
+  Future<List<Note>> getNotes([String? folderId, String? sortBy]) async {
+    String path;
+    Map<String, String> queryParams = {};
+
     if (folderId == null || folderId.isEmpty) {
-      url = '$baseUrl/notes'; // Get all notes
+      path = '/notes'; // Get all notes
     } else {
-      url = '$baseUrl/folders/$folderId/notes'; // Get notes by folder
+      path = '/folders/$folderId/notes'; // Get notes by folder
     }
-    final response = await http.get(Uri.parse(url));
+
+    if (sortBy != null && sortBy.isNotEmpty) {
+      queryParams['sort_by'] = sortBy;
+    }
+
+    final uri = Uri.parse('$baseUrl$path').replace(
+      queryParameters: queryParams.isEmpty ? null : queryParams,
+    );
+    final response = await http.get(uri);
     if (response.statusCode == 200) {
       print('Response body (getNotes): ${response.body}');
       Iterable list = json.decode(response.body);

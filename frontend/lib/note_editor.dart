@@ -7,10 +7,11 @@ import 'package:frontend/src/services/folder_service.dart';
 class NoteEditorScreen extends StatefulWidget {
   // Заметка для редактирования. Если null, экран находится в режиме создания.
   final Note? note;
-  final String? initialFolderId; // Added this line
+  final String? initialFolderId;
+  final Future<void> Function()? onDelete; // Changed VoidCallback to Future<void> Function()
 
   // Конструктор принимает необязательный параметр note.
-  const NoteEditorScreen({super.key, this.note, this.initialFolderId});
+  const NoteEditorScreen({super.key, this.note, this.initialFolderId, this.onDelete});
 
   @override
   State<NoteEditorScreen> createState() => _NoteEditorScreenState();
@@ -62,10 +63,41 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         title: Text(widget.note == null ? 'Новая заметка' : 'Редактировать', style: const TextStyle(color: Colors.black, fontSize: 17, fontWeight: FontWeight.w600)),
         // Добавляем кнопку сохранения на панель приложения.
         actions: [
-          TextButton(
+          IconButton(
+            icon: const Icon(Icons.save, color: Colors.amber), // Save icon
             onPressed: _saveNote, // При нажатии вызываем метод _saveNote.
-            child: const Text('Сохранить', style: TextStyle(color: Colors.blueAccent, fontSize: 17, fontWeight: FontWeight.bold)),
-          )
+          ),
+          if (widget.note != null) // Only show delete button for existing notes
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.redAccent),
+              onPressed: () {
+                // Show confirmation dialog before deleting
+                showDialog(
+                  context: context,
+                  builder: (BuildContext context) {
+                    return AlertDialog(
+                      title: const Text('Удалить заметку?'),
+                      content: const Text('Вы уверены, что хотите удалить эту заметку?'),
+                      actions: <Widget>[
+                        TextButton(
+                          child: const Text('Отмена'),
+                          onPressed: () {
+                            Navigator.of(context).pop(); // Dismiss dialog
+                          },
+                        ),
+                        TextButton(
+                          child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+                          onPressed: () async {
+                            Navigator.of(context).pop(); // Dismiss dialog
+                            await widget.onDelete?.call(); // Call the onDelete callback and await its completion
+                          },
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
         ],
       ),
       body: Padding(
