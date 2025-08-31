@@ -15,8 +15,8 @@ class MyApp extends StatelessWidget {
   // Этот метод строит дерево виджетов для корневого элемента.
   @override
   Widget build(BuildContext context) {
-    // MaterialApp - удобный виджет, который включает в себя ряд виджетов,
-    // обычно требуемых для приложений в стиле Material Design.
+    // MaterialApp — корневой Material-контейнер приложения.
+    // Здесь задается тема (темная), общие стили и стартовый экран AppShell.
     return MaterialApp(
       title: 'ПОТОК', // Название приложения (используется ОС).
       theme: ThemeData(
@@ -56,7 +56,8 @@ class MyApp extends StatelessWidget {
           foregroundColor: Colors.black, // Black icon
         ),
       ),
-      // Свойство home устанавливает маршрут по умолчанию для приложения.
+      // Свойство home устанавливает маршрут по умолчанию для приложения — AppShell
+      // с нижней навигацией по разделам.
       home: const AppShell(),
     );
   }

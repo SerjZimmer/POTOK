@@ -6,6 +6,17 @@ import 'package:frontend/src/services/folder_service.dart';
 import 'package:frontend/note_editor.dart';
 import 'package:collection/collection.dart'; // Import for firstWhereOrNull
 
+/// Экран «Заметки»:
+/// - слева список папок (с счетчиками);
+/// - справа список заметок, свайп влево удаляет;
+/// - FAB создает новую заметку.
+///
+/// Потоки данных:
+/// - _loadFolders() получает папки и затем вызывает _loadNotes() для текущего
+///   выбора;
+/// - _loadNotes([folderId]) сначала обновляет _allNotes (для счетчиков), затем
+///   подгружает видимые заметки для активной папки.
+
 class NotesMasterDetailScreen extends StatefulWidget {
   const NotesMasterDetailScreen({super.key});
 

@@ -4,6 +4,9 @@ import '../domain/entities.dart';
 import 'event_editor.dart';
 import 'day_schedule.dart';
 
+/// Экран «Календарь»: офлайн‑первый, поддержка RRULE и нескольких представлений.
+/// См. комментарии внизу файла к Month/Day/Week/Agenda‑вью.
+
 enum CalendarView { month, week, threeDay, day, agenda }
 
 class CalendarScreen extends StatefulWidget {

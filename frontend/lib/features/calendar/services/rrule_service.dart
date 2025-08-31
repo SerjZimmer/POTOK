@@ -1,4 +1,15 @@
-// RFC 5545 RRULE service (subset covering Google Calendar common rules)
+// RRuleService — простой сервис работы с RRULE (RFC 5545).
+//
+// Поддержка (MVP):
+// - FREQ=DAILY/WEEKLY/MONTHLY/YEARLY + INTERVAL
+// - BYDAY (в weekly) и позиционные BYDAY (1MO, -1SU) в monthly
+// - BYMONTHDAY/BYMONTH
+// - COUNT/UNTIL, EXDATE
+//
+// Особенности реализаций:
+// - все расчеты в UTC;
+// - экспансия выполняется в пределах окна [windowStart, windowEnd),
+//   это важно для производительности, особенно для бесконечных серий.
 
 class RRuleService {
   String withUntil(String rrule, DateTime untilUtc) {
@@ -8,6 +19,7 @@ class RRuleService {
     return build(m);
   }
   Map<String, dynamic> parse(String rrule) {
+    // Простейший парсер «ключ=значение;...» → Map.
     final parts = rrule.split(';');
     final map = <String, dynamic>{};
     for (final p in parts) {
@@ -49,6 +61,7 @@ class RRuleService {
   }
 
   String build(Map<String, dynamic> spec) {
+    // Обратно собираем RRULE из разобранного словаря.
     final buf = <String>[];
     void add(String k, String v) { buf.add('$k=$v'); }
     add('FREQ', (spec['FREQ'] as String).toUpperCase());
@@ -154,6 +167,7 @@ class RRuleService {
 
   // Helpers
   static DateTime _parseDateTime(String s) {
+    // Поддерживаем базовые форматы: YYYYMMDD и YYYYMMDDTHHMMSSZ
     // Support basic forms: YYYYMMDD or YYYYMMDDTHHMMSSZ
     if (s.endsWith('Z')) {
       final yyyy = int.parse(s.substring(0, 4));

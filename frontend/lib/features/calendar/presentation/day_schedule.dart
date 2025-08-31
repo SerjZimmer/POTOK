@@ -3,6 +3,9 @@ import '../data/file_repository.dart';
 import '../domain/entities.dart';
 import 'event_editor.dart';
 
+/// Экран «День»: показывает все события за сутки, позволяет быстро открыть
+/// редактор (тап) или создать новое (FAB). После возврата из редактора
+/// список перезагружается, чтобы изменения были видны сразу.
 class DaySchedulePage extends StatefulWidget {
   final DateTime day;
   final FileCalendarRepository repo;
@@ -41,6 +44,8 @@ class _DaySchedulePageState extends State<DaySchedulePage> {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
+          // Сортируем события по времени начала; развёрнутые повторения уже
+          // находятся в диапазоне [день, день+1).
           final items = (snap.data ?? const <EventEntity>[])..sort((a,b)=>a.startUtc.compareTo(b.startUtc));
           if (items.isEmpty) {
             return const Center(child: Text('Нет событий'));

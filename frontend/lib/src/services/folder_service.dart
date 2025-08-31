@@ -2,6 +2,11 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:frontend/src/models/folder.dart';
 
+/// FolderService — HTTP‑клиент для операций с папками заметок.
+///
+/// Все методы бросают Exception при кодах ответа >= 400, чтобы UI мог
+/// отобразить ошибку пользователю.
+
 class FolderService {
   final String baseUrl = 'http://localhost:8080'; // Base URL of your Go backend
 

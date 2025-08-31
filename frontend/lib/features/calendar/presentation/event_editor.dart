@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import '../data/file_repository.dart';
 import '../domain/entities.dart';
 
+/// Редактор события (создание/изменение/удаление).
+///
+/// Поддерживает выбор области действия при работе с сериями:
+/// - только этот инстанс → создается override (RECURRENCE-ID) и EXDATE в базе;
+/// - это и все последующие → серия разрезается, создается новая серия;
+/// - вся серия → обновляется/удаляется базовая запись.
 class EventEditorPage extends StatefulWidget {
   final DateTime? initialDay;
   final FileCalendarRepository repo;

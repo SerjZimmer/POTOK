@@ -2,6 +2,14 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:frontend/src/models/note.dart';
 
+/// NoteService — тонкий HTTP‑клиент для бэкенда Go.
+///
+/// Замечания:
+/// - baseUrl обязательно со схемой (http://), иначе Uri.parse кинет ошибку
+///   «No host specified…»;
+/// - для Android‑эмулятора адрес бэкенда обычно 10.0.2.2:8080 → в будущем
+///   вынести в конфиг по платформам.
+
 class NoteService {
   final String baseUrl = 'http://localhost:8080'; // Base URL of your Go backend
 

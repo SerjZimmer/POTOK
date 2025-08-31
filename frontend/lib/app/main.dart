@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:frontend/notes_master_detail_screen.dart';
 import 'package:frontend/features/calendar/presentation/calendar_screen.dart';
 
+/// AppShell — корневая «раковина» приложения с нижней навигацией.
+/// Переключает между «Заметки» и «Календарь», хранит состояние экранов
+/// через IndexedStack, чтобы не пересоздавать виджеты при переключении.
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -20,6 +23,8 @@ class _AppShellState extends State<AppShell> {
     ];
 
     return Scaffold(
+      // IndexedStack рисует только активную страницу, остальные остаются в дереве
+      // (важно для производительности и сохранения состояния).
       body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
@@ -42,4 +47,3 @@ class _AppShellState extends State<AppShell> {
     );
   }
 }
-
