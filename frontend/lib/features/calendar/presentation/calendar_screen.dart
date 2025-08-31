@@ -330,6 +330,7 @@ class _MonthView extends StatelessWidget {
               crossAxisCount: 7,
               mainAxisSpacing: 4,
               crossAxisSpacing: 4,
+              childAspectRatio: 0.9, // make cells a bit taller to avoid overflow
             ),
             itemCount: totalCells,
             itemBuilder: (_, i) {
