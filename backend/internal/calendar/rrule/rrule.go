@@ -66,18 +66,23 @@ func ExpandOccurrences(spec EventSpec, windowStart, windowEnd time.Time) []time.
 	dtStart := spec.StartUTC
 	add := func(t time.Time, out *[]time.Time) {
 		if !t.Before(dtStart) && !t.Before(windowStart) && t.Before(windowEnd) {
-			if _, skip := exset[t.Format(time.RFC3339)]; !skip {
+			if _, skip := exset[t.UTC().Format(time.RFC3339)]; !skip {
 				*out = append(*out, t)
 			}
 		}
 	}
 
 	out := []time.Time{}
+
+
 	switch freq {
 	case "DAILY":
 		cur := alignDaily(dtStart, interval, windowStart)
 		for beforeEnd(cur, until, count, len(out)) && cur.Before(windowEnd) {
 			add(cur, &out)
+			if count > 0 && len(out) >= count {
+				break
+			}
 			cur = cur.AddDate(0, 0, interval)
 		}
 	case "WEEKLY":

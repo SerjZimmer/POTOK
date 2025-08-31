@@ -60,7 +60,7 @@ func (s *sqliteCalendarService) Create(ctx context.Context, c model.Calendar) (m
     return c, err
 }
 func (s *sqliteCalendarService) Get(ctx context.Context, uid string) (model.Calendar, bool, error) {
-    row := s.db.QueryRowContext(ctx, `SELECT uid,name,color_hex,is_visible,tzid_default,created_at,updated_at,deleted_at FROM calendars WHERE uid=?`, uid)
+    row := s.db.QueryRowContext(ctx, `SELECT uid,name,color_hex,is_visible,tzid_default,created_at,updated_at,deleted_at FROM calendars WHERE uid=? AND deleted_at IS NULL`, uid)
     var c model.Calendar; var isVisible int; var created, updated string; var deleted sql.NullString
     if err := row.Scan(&c.UID,&c.Name,&c.ColorHex,&isVisible,&c.TZIDDefault,&created,&updated,&deleted); err!=nil { if errors.Is(err, sql.ErrNoRows){return model.Calendar{}, false, nil}; return model.Calendar{}, false, err }
     c.IsVisible = isVisible==1; c.CreatedAt,_ = time.Parse(time.RFC3339,created); c.UpdatedAt,_=time.Parse(time.RFC3339,updated); if deleted.Valid { t,_:=time.Parse(time.RFC3339,deleted.String); c.DeletedAt=&t }
@@ -242,10 +242,7 @@ func (s *sqliteEventService) Apply(ctx context.Context, uid, action, scope, recu
         if recurrenceID=="" { return nil, errors.New("recurrenceId required") }
         if scope=="this" {
             // upsert override — индивидуальные изменения для одного инстанса
-            _,err := s.db.ExecContext(ctx, `INSERT INTO event_overrides(parent_uid,recurrence_id,title,description,location,start_utc,end_utc,is_all_day,tzid) VALUES (?,?,?,?,?,?,?,?,?)`, uid, recurrenceID, patch["title"], patch["description"], patch["location"], patch["startUtc"], patch["endUtc"], toNullInt(patch["isAllDay"]), patch["tzid"])
-            if err!=nil { // try update
-                _,err = s.db.ExecContext(ctx, `UPDATE event_overrides SET title=?,description=?,location=?,start_utc=?,end_utc=?,is_all_day=?,tzid=?, deleted_at=NULL WHERE parent_uid=? AND recurrence_id=?`, patch["title"],patch["description"],patch["location"],patch["startUtc"],patch["endUtc"],toNullInt(patch["isAllDay"]),patch["tzid"], uid, recurrenceID)
-            }
+            _,err := s.db.ExecContext(ctx, `INSERT OR REPLACE INTO event_overrides(parent_uid,recurrence_id,title,description,location,start_utc,end_utc,is_all_day,tzid) VALUES (?,?,?,?,?,?,?,?,?)`, uid, recurrenceID, patch["title"], patch["description"], patch["location"], patch["startUtc"], patch["endUtc"], toNullInt(patch["isAllDay"]), patch["tzid"])
             return map[string]string{"status":"updated_this"}, err
         }
         if scope=="following" {
