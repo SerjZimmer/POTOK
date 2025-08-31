@@ -1,0 +1,399 @@
+openapi: 3.1.0
+info:
+  title: POTOK Calendar API
+  version: 0.1.0
+  description: REST API for Calendar sync (MVP stubs)
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      operationId: getHealthz
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness probe
+      operationId: getReadyz
+      responses:
+        '200':
+          description: Ready
+
+  /v1/calendars:
+    get:
+      summary: List calendars
+      operationId: listCalendars
+      responses:
+        '200':
+          description: OK
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Calendar' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+    post:
+      summary: Create calendar
+      operationId: createCalendar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Calendar' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Calendar' }
+
+  /v1/calendars/{calendarUid}:
+    parameters:
+      - in: path
+        name: calendarUid
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get calendar
+      operationId: getCalendar
+      responses:
+        '200':
+          description: OK
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Calendar' }
+        '404': { description: Not found }
+    patch:
+      summary: Update calendar (partial)
+      operationId: patchCalendar
+      parameters:
+        - in: header
+          name: If-Match
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Calendar' }
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Calendar' }
+        '409': { description: ETag conflict }
+    delete:
+      summary: Delete calendar
+      operationId: deleteCalendar
+      responses:
+        '204': { description: No Content }
+
+  /v1/events:
+    get:
+      summary: List/search events
+      operationId: listEvents
+      parameters:
+        - in: query
+          name: calendarUid
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - in: query
+          name: timeMin
+          schema: { type: string, format: date-time }
+        - in: query
+          name: timeMax
+          schema: { type: string, format: date-time }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: updatedMin
+          schema: { type: string, format: date-time }
+        - in: query
+          name: includeDeleted
+          schema: { type: boolean }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Event' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+    post:
+      summary: Create event
+      operationId: createEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Event' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+
+  /v1/events/{eventUid}:
+    parameters:
+      - in: path
+        name: eventUid
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get event
+      operationId: getEvent
+      responses:
+        '200':
+          description: OK
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '404': { description: Not found }
+    patch:
+      summary: Patch event
+      operationId: patchEvent
+      parameters:
+        - in: header
+          name: If-Match
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Event' }
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '409': { description: ETag conflict }
+    delete:
+      summary: Soft-delete event
+      operationId: deleteEvent
+      responses:
+        '204': { description: No Content }
+
+  /v1/events/{eventUid}/reminders:
+    parameters:
+      - in: path
+        name: eventUid
+        required: true
+        schema: { type: string }
+    get:
+      summary: List reminders
+      operationId: listReminders
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Reminder' }
+    put:
+      summary: Replace reminders (idempotent)
+      operationId: putReminders
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/Reminder' }
+      responses:
+        '204': { description: No Content }
+    post:
+      summary: Add reminder
+      operationId: addReminder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Reminder' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reminder' }
+
+  /v1/events/{eventUid}/reminders/{reminderId}:
+    parameters:
+      - in: path
+        name: eventUid
+        required: true
+        schema: { type: string }
+      - in: path
+        name: reminderId
+        required: true
+        schema: { type: integer }
+    delete:
+      summary: Delete reminder
+      operationId: deleteReminder
+      responses:
+        '204': { description: No Content }
+
+  /v1/sync/delta:
+    get:
+      summary: Delta sync stream
+      operationId: getDelta
+      parameters:
+        - in: query
+          name: anchor
+          required: true
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 100 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/DeltaPatch' }
+                  nextCursor: { type: string, nullable: true }
+                  newAnchor: { type: string }
+
+  /v1/import/ics:
+    post:
+      summary: Import ICS (stub)
+      operationId: importIcs
+      responses:
+        '202': { description: Accepted }
+
+  /v1/export/ics:
+    get:
+      summary: Export ICS (stub)
+      operationId: exportIcs
+      parameters:
+        - in: query
+          name: calendarUid
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+
+components:
+  schemas:
+    Calendar:
+      type: object
+      properties:
+        uid: { type: string }
+        name: { type: string }
+        colorHex: { type: string }
+        isVisible: { type: boolean }
+        tzidDefault: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        deletedAt: { type: string, format: date-time, nullable: true }
+      required: [uid, name, colorHex, isVisible, tzidDefault, createdAt, updatedAt]
+
+    Event:
+      type: object
+      properties:
+        uid: { type: string }
+        calendarUid: { type: string }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        location: { type: string, nullable: true }
+        startUtc: { type: string, format: date-time }
+        endUtc: { type: string, format: date-time }
+        isAllDay: { type: boolean }
+        tzid: { type: string }
+        recurrenceRule: { $ref: '#/components/schemas/RRule' }
+        exdates:
+          type: array
+          items: { type: string, format: date-time }
+          nullable: true
+        parentUid: { type: string, nullable: true }
+        recurrenceId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        deletedAt: { type: string, format: date-time, nullable: true }
+      required: [uid, calendarUid, title, startUtc, endUtc, isAllDay, tzid, createdAt, updatedAt]
+
+    Reminder:
+      type: object
+      properties:
+        id: { type: integer }
+        eventUid: { type: string }
+        offsetMinutes: { type: integer }
+        method: { type: string, enum: [notification] }
+      required: [id, eventUid, offsetMinutes, method]
+
+    RRule:
+      type: object
+      description: RFC 5545 RRULE representation
+      properties:
+        raw: { type: string }
+
+    RecurrenceOverride:
+      type: object
+      properties:
+        recurrenceId: { type: string }
+        event: { $ref: '#/components/schemas/Event' }
+
+    DeltaPatch:
+      type: object
+      properties:
+        type: { type: string, enum: [upsert, delete] }
+        entity: { type: string, enum: [calendar, event, reminder] }
+        data: { oneOf: [ { $ref: '#/components/schemas/Calendar' }, { $ref: '#/components/schemas/Event' }, { $ref: '#/components/schemas/Reminder' } ], nullable: true }
+        uid: { type: string, nullable: true }
+        deletedAt: { type: string, format: date-time, nullable: true }
+
+    Error:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, additionalProperties: true, nullable: true }
+
+    PageMeta:
+      type: object
+      properties:
+        limit: { type: integer }
+        nextCursor: { type: string, nullable: true }
+        total: { type: integer, nullable: true }
+

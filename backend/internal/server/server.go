@@ -1,12 +1,13 @@
 package server
 
 import (
-	"encoding/json"
-	"log/slog"
-	"net/http"
+    "encoding/json"
+    "log/slog"
+    "net/http"
 
-	"github.com/gorilla/mux"
-	"potok/backend/internal/store"
+    "github.com/gorilla/mux"
+    "potok/backend/internal/store"
+    calhttp "potok/backend/internal/calendar/http"
 )
 
 // Server содержит зависимости для HTTP-сервера, такие как роутер и хранилище.
@@ -29,17 +30,24 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // configureRoutes настраивает все маршруты для API.
 func (s *Server) configureRoutes() {
-	// Маршруты для Папок
-	s.router.HandleFunc("/folders", s.handleGetFolders()).Methods("GET")
-	s.router.HandleFunc("/folders", s.handleCreateFolder()).Methods("POST")
-	s.router.HandleFunc("/folders/{folderId}", s.handleDeleteFolder()).Methods("DELETE") // New route
+    // Маршруты для Папок
+    s.router.HandleFunc("/folders", s.handleGetFolders()).Methods("GET")
+    s.router.HandleFunc("/folders", s.handleCreateFolder()).Methods("POST")
+    s.router.HandleFunc("/folders/{folderId}", s.handleDeleteFolder()).Methods("DELETE") // New route
 
 	// Маршруты для Заметок
 	s.router.HandleFunc("/folders/{folderId}/notes", s.handleListNotes()).Methods("GET")
 	s.router.HandleFunc("/notes", s.handleListAllNotes()).Methods("GET") // New route
 	s.router.HandleFunc("/notes", s.handleCreateNote()).Methods("POST")
 	s.router.HandleFunc("/notes/{noteId}", s.handleUpdateNote()).Methods("PUT")
-	s.router.HandleFunc("/notes/{noteId}", s.handleDeleteNote()).Methods("DELETE")
+    s.router.HandleFunc("/notes/{noteId}", s.handleDeleteNote()).Methods("DELETE")
+
+    // Health endpoints
+    s.router.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }).Methods("GET")
+    s.router.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }).Methods("GET")
+
+    // Calendar API (chi router mounted under /v1)
+    s.router.PathPrefix("/v1").Handler(calhttp.NewRouter())
 }
 
 // New handler to delete a folder and its notes

@@ -370,6 +370,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                 backgroundColor: Colors.grey[700], // Set background to match container
                 key: ValueKey(_selectedFolderId ?? 'all_notes'), // Add a key to the Scaffold
                 floatingActionButton: FloatingActionButton(
+                  heroTag: 'notes-fab',
                   onPressed: _addNote,
                   tooltip: 'Новая заметка',
                   backgroundColor: Colors.amber, // Gold background

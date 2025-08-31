@@ -1,7 +1,7 @@
 // Импортируем необходимые пакеты из Flutter.
 import 'package:flutter/material.dart';
 import 'package:flutter/material.dart';
-import 'package:frontend/notes_master_detail_screen.dart';
+import 'package:frontend/app/main.dart';
 
 // main - главная точка входа во Flutter-приложение.
 void main() {
@@ -57,7 +57,7 @@ class MyApp extends StatelessWidget {
         ),
       ),
       // Свойство home устанавливает маршрут по умолчанию для приложения.
-      home: const NotesMasterDetailScreen(),
+      home: const AppShell(),
     );
   }
 }
