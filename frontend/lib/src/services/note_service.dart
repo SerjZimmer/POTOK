@@ -12,6 +12,11 @@ import 'package:frontend/src/models/note.dart';
 
 class NoteService {
   final String baseUrl = 'http://localhost:8080'; // Base URL of your Go backend
+  http.Client _client;
+
+  NoteService({http.Client? client}) : _client = client ?? http.Client();
+
+  set client(http.Client client) => _client = client;
 
   Future<List<Note>> getNotes([String? folderId, String? sortBy]) async {
     String path;
@@ -30,7 +35,7 @@ class NoteService {
     final uri = Uri.parse('$baseUrl$path').replace(
       queryParameters: queryParams.isEmpty ? null : queryParams,
     );
-    final response = await http.get(uri);
+    final response = await _client.get(uri);
     if (response.statusCode == 200) {
       print('Response body (getNotes): ${response.body}');
       Iterable list = json.decode(response.body);
@@ -43,7 +48,7 @@ class NoteService {
   }
 
   Future<Note> createNote(Note note) async {
-    final response = await http.post(
+    final response = await _client.post(
       Uri.parse('$baseUrl/notes'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode(note.toJson()),
@@ -58,7 +63,7 @@ class NoteService {
   }
 
   Future<Note> updateNote(Note note) async {
-    final response = await http.put(
+    final response = await _client.put(
       Uri.parse('$baseUrl/notes/${note.id}'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode(note.toJson()),
@@ -73,7 +78,7 @@ class NoteService {
   }
 
   Future<void> deleteNote(String id) async {
-    final response = await http.delete(Uri.parse('$baseUrl/notes/$id'));
+    final response = await _client.delete(Uri.parse('$baseUrl/notes/$id'));
     if (response.statusCode != 204) {
       print('Error: ${response.statusCode}');
       print('Response body: ${response.body}');

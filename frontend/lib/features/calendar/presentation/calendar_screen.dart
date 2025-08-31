@@ -10,7 +10,8 @@ import 'day_schedule.dart';
 enum CalendarView { month, week, threeDay, day, agenda }
 
 class CalendarScreen extends StatefulWidget {
-  const CalendarScreen({super.key});
+  final ApiCalendarRepository? repo;
+  const CalendarScreen({super.key, this.repo});
 
   @override
   State<CalendarScreen> createState() => _CalendarScreenState();
@@ -20,7 +21,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   CalendarView _view = CalendarView.month;
   DateTime _visibleMonth = _monthStart(DateTime.now());
   DateTime _focusDay = DateTime.now();
-  final ApiCalendarRepository _repo = ApiCalendarRepository();
+  late final ApiCalendarRepository _repo;
   List<EventEntity> _events = [];
   bool _loading = true;
   List<CalendarEntity> _calendars = [];
@@ -28,6 +29,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   void initState() {
     super.initState();
+    _repo = widget.repo ?? ApiCalendarRepository();
     _reloadMonthEvents();
     _reloadCalendars();
   }

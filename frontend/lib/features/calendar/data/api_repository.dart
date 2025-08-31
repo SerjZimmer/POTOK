@@ -4,11 +4,13 @@ import '../domain/entities.dart';
 
 class ApiCalendarRepository {
   final String baseUrl;
-  ApiCalendarRepository({this.baseUrl = 'http://localhost:8080'});
+  final http.Client _client;
+
+  ApiCalendarRepository({this.baseUrl = 'http://localhost:8080', http.Client? client}) : _client = client ?? http.Client();
 
   Future<List<CalendarEntity>> listCalendars() async {
     final uri = Uri.parse('$baseUrl/v1/calendars');
-    final res = await http.get(uri);
+    final res = await _client.get(uri);
     if (res.statusCode != 200) throw Exception('listCalendars ${res.statusCode}');
     final body = json.decode(res.body) as Map<String, dynamic>;
     final items = (body['items'] as List?) ?? [];
@@ -17,7 +19,7 @@ class ApiCalendarRepository {
 
   Future<CalendarEntity> createCalendar(String name, {String colorHex = '#FFC107', String tzidDefault = 'UTC'}) async {
     final uri = Uri.parse('$baseUrl/v1/calendars');
-    final res = await http.post(uri, headers: {'Content-Type':'application/json'}, body: json.encode({
+    final res = await _client.post(uri, headers: {'Content-Type':'application/json'}, body: json.encode({
       'uid': '', 'name': name, 'colorHex': colorHex, 'tzidDefault': tzidDefault, 'isVisible': true
     }));
     if (res.statusCode != 201 && res.statusCode != 200) throw Exception('createCalendar ${res.statusCode}: ${res.body}');
@@ -31,7 +33,7 @@ class ApiCalendarRepository {
     if (colorHex != null) payload['colorHex'] = colorHex;
     if (isVisible != null) payload['isVisible'] = isVisible;
     if (tzidDefault != null) payload['tzidDefault'] = tzidDefault;
-    final res = await http.patch(uri, headers: {'Content-Type':'application/json'}, body: json.encode(payload));
+    final res = await _client.patch(uri, headers: {'Content-Type':'application/json'}, body: json.encode(payload));
     if (res.statusCode != 200) {
       throw Exception('updateCalendar ${res.statusCode}: ${res.body}');
     }
@@ -40,21 +42,21 @@ class ApiCalendarRepository {
 
   Future<EventEntity> createEvent(EventEntity e) async {
     final uri = Uri.parse('$baseUrl/v1/events');
-    final res = await http.post(uri, headers: {'Content-Type':'application/json'}, body: json.encode(_eventToJson(e)));
+    final res = await _client.post(uri, headers: {'Content-Type':'application/json'}, body: json.encode(_eventToJson(e)));
     if (res.statusCode != 201 && res.statusCode != 200) throw Exception('createEvent ${res.statusCode}: ${res.body}');
     return EventEntity.fromJson(json.decode(res.body));
   }
 
   Future<EventEntity> updateEvent(EventEntity e) async {
     final uri = Uri.parse('$baseUrl/v1/events/${e.uid}');
-    final res = await http.patch(uri, headers: {'Content-Type':'application/json'}, body: json.encode(_eventToJson(e)));
+    final res = await _client.patch(uri, headers: {'Content-Type':'application/json'}, body: json.encode(_eventToJson(e)));
     if (res.statusCode != 200) throw Exception('updateEvent ${res.statusCode}: ${res.body}');
     return EventEntity.fromJson(json.decode(res.body));
   }
 
   Future<void> deleteEvent(String uid) async {
     final uri = Uri.parse('$baseUrl/v1/events/$uid');
-    final res = await http.delete(uri);
+    final res = await _client.delete(uri);
     if (res.statusCode != 204) throw Exception('deleteEvent ${res.statusCode}: ${res.body}');
   }
 
@@ -75,7 +77,7 @@ class ApiCalendarRepository {
       ];
       uri = Uri.parse('${uri.scheme}://${uri.host}:${uri.port}${uri.path}?${pairs.join('&')}');
     }
-    final res = await http.get(uri);
+    final res = await _client.get(uri);
     if (res.statusCode != 200) throw Exception('expand ${res.statusCode}: ${res.body}');
     final body = json.decode(res.body) as Map<String, dynamic>;
     final items = (body['items'] as List?) ?? [];
@@ -90,7 +92,7 @@ class ApiCalendarRepository {
       if (recurrenceId != null) 'recurrenceId': recurrenceId,
       if (patch != null) 'patch': patch,
     };
-    final res = await http.post(uri, headers: {'Content-Type':'application/json'}, body: json.encode(payload));
+    final res = await _client.post(uri, headers: {'Content-Type':'application/json'}, body: json.encode(payload));
     if (res.statusCode != 200) throw Exception('apply ${res.statusCode}: ${res.body}');
   }
 

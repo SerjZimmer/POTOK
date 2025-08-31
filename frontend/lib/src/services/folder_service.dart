@@ -9,9 +9,14 @@ import 'package:frontend/src/models/folder.dart';
 
 class FolderService {
   final String baseUrl = 'http://localhost:8080'; // Base URL of your Go backend
+  http.Client _client;
+
+  FolderService({http.Client? client}) : _client = client ?? http.Client();
+
+  set client(http.Client client) => _client = client;
 
   Future<List<Folder>> getFolders() async {
-    final response = await http.get(Uri.parse('$baseUrl/folders'));
+    final response = await _client.get(Uri.parse('$baseUrl/folders'));
     if (response.statusCode == 200) {
       Iterable list = json.decode(response.body);
       return list.map((model) => Folder.fromJson(model)).toList();
@@ -23,7 +28,7 @@ class FolderService {
   }
 
   Future<Folder> createFolder(String name) async {
-    final response = await http.post(
+    final response = await _client.post(
       Uri.parse('$baseUrl/folders'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({'name': name}),
@@ -38,7 +43,7 @@ class FolderService {
   }
 
   Future<Folder> updateFolder(String id, String newName) async {
-    final response = await http.put(
+    final response = await _client.put(
       Uri.parse('$baseUrl/folders/$id'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({'name': newName}),
@@ -53,7 +58,7 @@ class FolderService {
   }
 
   Future<void> deleteFolder(String id) async {
-    final response = await http.delete(Uri.parse('$baseUrl/folders/$id'));
+    final response = await _client.delete(Uri.parse('$baseUrl/folders/$id'));
     if (response.statusCode != 204) {
       print('Error: ${response.statusCode}');
       print('Response body: ${response.body}');

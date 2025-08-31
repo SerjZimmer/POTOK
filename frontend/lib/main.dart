@@ -1,34 +1,50 @@
-// Импортируем необходимые пакеты из Flutter.
-import 'package:flutter/material.dart';
 import 'package:flutter/material.dart';
 import 'package:frontend/app/main.dart';
+import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+import 'package:frontend/src/services/note_service.dart';
+import 'package:frontend/src/services/folder_service.dart';
+import 'package:frontend/features/calendar/data/api_repository.dart';
 
-// main - главная точка входа во Flutter-приложение.
 void main() {
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        Provider<http.Client>(
+          create: (_) => http.Client(),
+        ),
+        Provider<NoteService>(
+          create: (context) => NoteService(client: context.read<http.Client>()),
+        ),
+        Provider<FolderService>(
+          create: (context) => FolderService(client: context.read<http.Client>()),
+        ),
+        Provider<ApiCalendarRepository>(
+          create: (context) => ApiCalendarRepository(client: context.read<http.Client>()),
+        ),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
-// MyApp - корневой виджет приложения.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // Этот метод строит дерево виджетов для корневого элемента.
   @override
   Widget build(BuildContext context) {
-    // MaterialApp — корневой Material-контейнер приложения.
-    // Здесь задается тема (темная), общие стили и стартовый экран AppShell.
     return MaterialApp(
-      title: 'ПОТОК', // Название приложения (используется ОС).
+      title: 'ПОТОК',
       theme: ThemeData(
-        brightness: Brightness.dark, // Dark theme
-        scaffoldBackgroundColor: Colors.grey[700]!, // Lighter gray background
-        primaryColor: Colors.amber, // Set primary color to gold
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: Colors.grey[700]!,
+        primaryColor: Colors.amber,
         visualDensity: VisualDensity.adaptivePlatformDensity,
         appBarTheme: AppBarTheme(
-          backgroundColor: Colors.grey[800], // Dark gray app bar
-          foregroundColor: Colors.white, // White text/icons
-          elevation: 0, // Add shadow for separation
-          titleTextStyle: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), // White title
+          backgroundColor: Colors.grey[800],
+          foregroundColor: Colors.white,
+          elevation: 0,
+          titleTextStyle: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
         ),
         textTheme: const TextTheme(
           displayLarge: TextStyle(color: Colors.white),
@@ -48,17 +64,15 @@ class MyApp extends StatelessWidget {
           labelSmall: TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(
-          color: Colors.amber, // Gold icons
+          color: Colors.amber,
         ),
-        dividerColor: Colors.grey, // Grey dividers
+        dividerColor: Colors.grey,
         floatingActionButtonTheme: const FloatingActionButtonThemeData(
-          backgroundColor: Colors.amber, // Gold background
-          foregroundColor: Colors.black, // Black icon
+          backgroundColor: Colors.amber,
+          foregroundColor: Colors.black,
         ),
       ),
-      // Свойство home устанавливает маршрут по умолчанию для приложения — AppShell
-      // с нижней навигацией по разделам.
-      home: const AppShell(),
+      home: AppShell(noteService: context.read<NoteService>(), folderService: context.read<FolderService>()),
     );
   }
 }
