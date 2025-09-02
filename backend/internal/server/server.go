@@ -9,6 +9,8 @@ import (
     "potok/backend/internal/store"
     calhttp "potok/backend/internal/calendar/http"
     calsvc "potok/backend/internal/calendar/service"
+    boardhttp "potok/backend/internal/boards/http"
+    boardsvc "potok/backend/internal/boards/service"
 )
 
 // Server содержит зависимости для HTTP-сервера, такие как роутер и хранилище.
@@ -47,14 +49,32 @@ func (s *Server) configureRoutes() {
     s.router.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }).Methods("GET")
     s.router.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }).Methods("GET")
 
-    // Calendar API (chi router mounted under /v1) — используем SQLite‑сервисы
+    // Calendar API — chi router mounted under its prefixes
     calRouter := calhttp.NewRouterWithServices(
         calsvc.NewSQLiteCalendarService(s.store.DB()),
         calsvc.NewSQLiteEventService(s.store.DB()),
         calsvc.NoopReminderService{},
         calsvc.NoopSyncService{},
     )
-    s.router.PathPrefix("/v1").Handler(calRouter)
+    // Boards API — chi router
+    boardRouter := boardhttp.NewRouter(
+        boardsvc.NewSQLiteBoardService(s.store.DB()),
+        boardsvc.NewSQLiteIssueService(s.store.DB()),
+    )
+
+    // Mount specific prefixes to avoid a greedy catch-all
+    // Calendar
+    s.router.PathPrefix("/v1/calendars").Handler(calRouter)
+    s.router.PathPrefix("/v1/events").Handler(calRouter)
+    s.router.PathPrefix("/v1/sync").Handler(calRouter)
+    s.router.PathPrefix("/v1/import").Handler(calRouter)
+    s.router.PathPrefix("/v1/export").Handler(calRouter)
+    // Boards
+    s.router.PathPrefix("/v1/boards").Handler(boardRouter)
+    s.router.PathPrefix("/v1/issues").Handler(boardRouter)
+    s.router.PathPrefix("/v1/cards").Handler(boardRouter)
+    s.router.PathPrefix("/v1/comments").Handler(boardRouter)
+    s.router.PathPrefix("/v1/checklist_items").Handler(boardRouter)
 }
 
 // New handler to delete a folder and its notes

@@ -116,3 +116,19 @@ POTOK — руководство по текущему функционалу (F
 
 Если в ходе тестирования найдёте баги/несоответствия, пожалуйста, опишите шаги воспроизведения и ожидаемый результат — это ускорит исправление и покрытие тестами.
 
+Модуль «Доски» (Kanban, локальный API)
+
+- Где в UI: нижняя вкладка «Доски». Список досок → экран доски.
+- Базовые возможности: колонки (WIP‑лимит), карточки, перетаскивание между колонками, поиск по тексту, карточка с чек‑листом/комментариями/тегами.
+- REST (локально под /v1/*):
+  - Boards: GET/POST /v1/boards
+  - Columns: GET/POST /v1/boards/{boardId}/columns, PATCH/DELETE /v1/columns/{id}, PUT /v1/boards/{boardId}/columns/order
+  - Cards: GET/POST /v1/boards/{boardId}/issues?column_id=&search=&tags=, GET/PATCH/DELETE /v1/issues/{id}, POST /v1/issues/{id}:move
+  - Checklists: GET/POST /v1/cards/{id}/checklist, PATCH/DELETE /v1/checklist_items/{id}
+  - Comments: GET/POST /v1/cards/{id}/comments, DELETE /v1/comments/{id}
+  - Tags: POST /v1/cards/{id}/tags:bulk, DELETE /v1/cards/{id}/tags/{tag}
+- Примечания:
+  - Перемещение учитывает WIP‑лимит колонки (ошибка 409). В UI показывается Snackbar «WIP‑лимит колонки достигнут».
+  - Позиция карточки внутри колонки задаётся целым числом; при переносе ставится в конец.
+  - Due Date карточки создаёт событие в календаре (UTC, 1 час, «Due: …»).
+

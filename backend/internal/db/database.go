@@ -1,11 +1,12 @@
 package db
 
 import (
-	"database/sql"
-	"fmt"
-	"log/slog"
+    "database/sql"
+    "fmt"
+    "log/slog"
+    "strings"
 
-	_ "github.com/mattn/go-sqlite3"
+    _ "github.com/mattn/go-sqlite3"
 )
 
 // InitDB инициализирует базу данных SQLite и создает/обновляет таблицы.
@@ -156,6 +157,222 @@ func InitDB(filepath string) (*sql.DB, error) {
     }
     if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_exdates_parent ON event_exdates(parent_uid, exdate)`); err != nil {
         slog.Warn("DB: Не удалось создать индекс idx_exdates_parent", "error", err)
+    }
+
+    // --- Доски (Kanban/Scrum) ---
+    boardsQuery := `
+    CREATE TABLE IF NOT EXISTS boards (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL, -- 'kanban' | 'scrum'
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );`
+    if _, err := db.Exec(boardsQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'boards'", "error", err)
+        return nil, err
+    }
+    columnsQuery := `
+    CREATE TABLE IF NOT EXISTS board_columns (
+        id TEXT PRIMARY KEY,
+        board_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        wip_limit INTEGER,
+        position INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(board_id) REFERENCES boards(id)
+    );`
+    if _, err := db.Exec(columnsQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'board_columns'", "error", err)
+        return nil, err
+    }
+    issuesQuery := `
+    CREATE TABLE IF NOT EXISTS issues (
+        id TEXT PRIMARY KEY,
+        board_id TEXT NOT NULL,
+        column_id TEXT NOT NULL,
+        type TEXT NOT NULL, -- epic|story|task|bug|subtask
+        summary TEXT NOT NULL,
+        description TEXT,
+        priority TEXT,
+        labels TEXT, -- csv labels
+        due_date TEXT, -- RFC3339
+        created_by_name TEXT,
+        assigned_to_name TEXT,
+        responsible_name TEXT,
+        note_id TEXT, -- optional link to notes.id
+        position INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(board_id) REFERENCES boards(id),
+        FOREIGN KEY(column_id) REFERENCES board_columns(id)
+    );`
+    if _, err := db.Exec(issuesQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'issues'", "error", err)
+        return nil, err
+    }
+    // Миграции для новых колонок в issues (idempotent): добавляем, если их нет
+    // created_by_name
+    if _, err := db.Exec(`ALTER TABLE issues ADD COLUMN created_by_name TEXT`); err != nil {
+        if !strings.Contains(err.Error(), "duplicate column name") { slog.Warn("DB: ALTER issues add created_by_name", "error", err) }
+    }
+    if _, err := db.Exec(`ALTER TABLE issues ADD COLUMN assigned_to_name TEXT`); err != nil {
+        if !strings.Contains(err.Error(), "duplicate column name") { slog.Warn("DB: ALTER issues add assigned_to_name", "error", err) }
+    }
+    if _, err := db.Exec(`ALTER TABLE issues ADD COLUMN responsible_name TEXT`); err != nil {
+        if !strings.Contains(err.Error(), "duplicate column name") { slog.Warn("DB: ALTER issues add responsible_name", "error", err) }
+    }
+    commentsQuery := `
+    CREATE TABLE IF NOT EXISTS issue_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        issue_id TEXT NOT NULL,
+        author TEXT,
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(issue_id) REFERENCES issues(id)
+    );`
+    if _, err := db.Exec(commentsQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'issue_comments'", "error", err)
+        return nil, err
+    }
+    sprintsQuery := `
+    CREATE TABLE IF NOT EXISTS sprints (
+        id TEXT PRIMARY KEY,
+        board_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        state TEXT NOT NULL, -- planned|active|closed
+        start_date TEXT,
+        end_date TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(board_id) REFERENCES boards(id)
+    );`
+    if _, err := db.Exec(sprintsQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'sprints'", "error", err)
+        return nil, err
+    }
+    if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_issues_board_column ON issues(board_id, column_id)`); err != nil {
+        slog.Warn("DB: Не удалось создать индекс idx_issues_board_column", "error", err)
+    }
+    if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_issues_due ON issues(due_date)`); err != nil {
+        slog.Warn("DB: Не удалось создать индекс idx_issues_due", "error", err)
+    }
+
+    // Справочники имён по ролям
+    peopleQuery := `
+    CREATE TABLE IF NOT EXISTS board_people (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        board_id TEXT NOT NULL,
+        role TEXT NOT NULL, -- SETTER|ASSIGNEE|RESPONSIBLE
+        name TEXT NOT NULL,
+        UNIQUE(board_id, role, name),
+        FOREIGN KEY(board_id) REFERENCES boards(id)
+    );`
+    if _, err := db.Exec(peopleQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'board_people'", "error", err)
+        return nil, err
+    }
+
+    // Кастомные поля доски и значения задач
+    fieldsQuery := `
+    CREATE TABLE IF NOT EXISTS board_fields (
+        id TEXT PRIMARY KEY,
+        board_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        ftype TEXT NOT NULL, -- text|number|date|enum|user
+        options_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(board_id) REFERENCES boards(id)
+    );`
+    if _, err := db.Exec(fieldsQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'board_fields'", "error", err)
+        return nil, err
+    }
+    valuesQuery := `
+    CREATE TABLE IF NOT EXISTS issue_field_values (
+        issue_id TEXT NOT NULL,
+        field_id TEXT NOT NULL,
+        value_json TEXT,
+        PRIMARY KEY(issue_id, field_id),
+        FOREIGN KEY(issue_id) REFERENCES issues(id) ON DELETE CASCADE,
+        FOREIGN KEY(field_id) REFERENCES board_fields(id) ON DELETE CASCADE
+    );`
+    if _, err := db.Exec(valuesQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'issue_field_values'", "error", err)
+        return nil, err
+    }
+
+    // Настройки уведомлений доски
+    notifQuery := `
+    CREATE TABLE IF NOT EXISTS board_notifications (
+        board_id TEXT PRIMARY KEY,
+        due_soon_hours INTEGER NOT NULL DEFAULT 24,
+        create_calendar_event INTEGER NOT NULL DEFAULT 1,
+        create_default_reminders INTEGER NOT NULL DEFAULT 0,
+        reminder_offsets_csv TEXT, -- запятая-разделённые минуты до события
+        FOREIGN KEY(board_id) REFERENCES boards(id)
+    );`
+    if _, err := db.Exec(notifQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'board_notifications'", "error", err)
+        return nil, err
+    }
+
+    // Приоритеты доски
+    prioritiesQuery := `
+    CREATE TABLE IF NOT EXISTS board_priorities (
+        board_id TEXT NOT NULL,
+        pkey TEXT NOT NULL,
+        label TEXT NOT NULL,
+        color_hex TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY(board_id, pkey),
+        FOREIGN KEY(board_id) REFERENCES boards(id)
+    );`
+    if _, err := db.Exec(prioritiesQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'board_priorities'", "error", err)
+        return nil, err
+    }
+
+    // Дополнительные таблицы для модуля «Доски»: чек-лист, теги, activity log
+    checklistQuery := `
+    CREATE TABLE IF NOT EXISTS issue_checklist_items (
+        id TEXT PRIMARY KEY,
+        issue_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        is_done INTEGER NOT NULL DEFAULT 0,
+        order_index INTEGER NOT NULL,
+        FOREIGN KEY(issue_id) REFERENCES issues(id) ON DELETE CASCADE
+    );`
+    if _, err := db.Exec(checklistQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'issue_checklist_items'", "error", err)
+        return nil, err
+    }
+    tagsQuery := `
+    CREATE TABLE IF NOT EXISTS issue_tags (
+        issue_id TEXT NOT NULL,
+        tag TEXT NOT NULL,
+        PRIMARY KEY (issue_id, tag),
+        FOREIGN KEY(issue_id) REFERENCES issues(id) ON DELETE CASCADE
+    );`
+    if _, err := db.Exec(tagsQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'issue_tags'", "error", err)
+        return nil, err
+    }
+    activityQuery := `
+    CREATE TABLE IF NOT EXISTS activity_log (
+        id TEXT PRIMARY KEY,
+        ts TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        before_json TEXT,
+        after_json TEXT
+    );`
+    if _, err := db.Exec(activityQuery); err != nil {
+        slog.Error("DB: Ошибка при создании таблицы 'activity_log'", "error", err)
+        return nil, err
     }
     slog.Info("DB: Инициализация базы данных завершена успешно.")
     return db, nil
