@@ -12,6 +12,9 @@ type EventService interface {
     Get(ctx context.Context, uid string) (model.Event, bool, error)
     Patch(ctx context.Context, uid string, patch map[string]interface{}, ifMatch string) (model.Event, error)
     Delete(ctx context.Context, uid string) error
+    // New methods for server-side logic
+    Expand(ctx context.Context, timeMinISO, timeMaxISO string, calendarUids []string, q string) ([]model.Event, error)
+    Apply(ctx context.Context, uid, action, scope, recurrenceID string, patch map[string]interface{}) (interface{}, error)
 }
 
 type NoopEventService struct{}
@@ -31,4 +34,3 @@ func (s NoopEventService) Patch(ctx context.Context, uid string, patch map[strin
     return model.Event{UID: uid, Title: "patched", StartUTC: time.Now().UTC(), EndUTC: time.Now().UTC().Add(time.Hour), TZID: "UTC", IsAllDay: false, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}, nil
 }
 func (s NoopEventService) Delete(ctx context.Context, uid string) error { return nil }
-

@@ -1,3 +1,7 @@
+/// CalendarEntity — локальная модель календаря (офлайн‑хранилище).
+///
+/// Гарантируем минимальный набор полей для MVP и будущей синхронизации:
+/// uid (строка), имя, цвет, видимость и дефолтная TZ.
 class CalendarEntity {
   final String uid;
   final String name;
@@ -30,6 +34,14 @@ class CalendarEntity {
       );
 }
 
+/// EventEntity — локальная модель события.
+///
+/// Особенности:
+/// - startUtc/endUtc — всегда UTC (для простоты кросс‑платформенной работы);
+/// - recurrenceRule — строка RRULE (RFC 5545), если событие повторяется;
+/// - exdates — список исключений (EXDATE) в UTC;
+/// - parentUid/recurrenceId — используются для override‑инстансов: 
+///   «только это повторение» хранится как отдельная запись с привязкой к серии.
 class EventEntity {
   final String uid;
   final String calendarUid;

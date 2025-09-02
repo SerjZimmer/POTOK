@@ -5,9 +5,29 @@ import 'package:frontend/src/models/folder.dart';
 import 'package:frontend/src/services/folder_service.dart';
 import 'package:frontend/note_editor.dart';
 import 'package:collection/collection.dart'; // Import for firstWhereOrNull
+import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+
+/// Экран «Заметки»:
+/// - слева список папок (с счетчиками);
+/// - справа список заметок, свайп влево удаляет;
+/// - FAB создает новую заметку.
+///
+/// Потоки данных:
+/// - _loadFolders() получает папки и затем вызывает _loadNotes() для текущего
+///   выбора;
+/// - _loadNotes([folderId]) сначала обновляет _allNotes (для счетчиков), затем
+///   подгружает видимые заметки для активной папки.
 
 class NotesMasterDetailScreen extends StatefulWidget {
-  const NotesMasterDetailScreen({super.key});
+  NoteService? noteService;
+  FolderService? folderService;
+
+                      NotesMasterDetailScreen({
+    super.key,
+    this.noteService,
+    this.folderService,
+  });
 
   @override
   State<NotesMasterDetailScreen> createState() => _NotesMasterDetailScreenState();
@@ -16,35 +36,28 @@ class NotesMasterDetailScreen extends StatefulWidget {
 class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
   List<Note> _allNotes = []; // All notes for counting
   List<Note> _displayedNotes = []; // Notes for current view
-  final NoteService _noteService = NoteService();
 
   List<Folder> _folders = [];
-  final FolderService _folderService = FolderService();
   String? _selectedFolderId; // Null means all notes
 
-  @override
+          @override
   void initState() {
     super.initState();
     _loadNotes();
     _loadFolders();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
   Future<void> _loadNotes([String? folderId, String? sortBy]) async {
     print('[NotesMasterDetailScreen] _loadNotes Called with folderId: $folderId');
     try {
       // Always fetch all notes to update _allNotes for counting
-      final allFetchedNotes = await _noteService.getNotes(null); // Fetch all notes
+      final allFetchedNotes = await widget.noteService!.getNotes(null); // Fetch all notes
       setState(() {
         _allNotes = allFetchedNotes;
       });
 
       // Fetch notes for the current view
-      final displayedFetchedNotes = await _noteService.getNotes(folderId, sortBy); // Pass sortBy
+      final displayedFetchedNotes = await widget.noteService!.getNotes(folderId, sortBy); // Pass sortBy
       setState(() {
         _displayedNotes = displayedFetchedNotes;
         print('[NotesMasterDetailScreen] _displayedNotes updated. Current count: ${_displayedNotes.length}');
@@ -56,7 +69,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
 
   Future<void> _loadFolders() async {
     try {
-      final fetchedFolders = await _folderService.getFolders();
+      final fetchedFolders = await widget.folderService!.getFolders();
       setState(() {
         _folders = fetchedFolders;
       });
@@ -80,7 +93,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
 
     if (result != null) {
       try {
-        await _noteService.createNote(result);
+        await widget.noteService!.createNote(result);
         _loadNotes(_selectedFolderId);
       } catch (e) {
         print('[NotesMasterDetailScreen] Перехвачена ошибка: $e');
@@ -90,7 +103,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
 
   Future<void> _deleteNote(String id) async {
     try {
-      await _noteService.deleteNote(id);
+      await widget.noteService!.deleteNote(id);
       // Simply refresh the notes list based on the current selection
       _loadNotes(_selectedFolderId);
 
@@ -116,7 +129,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
 
     if (result != null) {
       try {
-        await _noteService.updateNote(result);
+        await widget.noteService!.updateNote(result);
         _loadNotes(_selectedFolderId);
       } catch (e) {
         print('[NotesMasterDetailScreen] Перехвачена ошибка: $e');
@@ -157,7 +170,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
 
     if (folderName != null && folderName.isNotEmpty) {
       try {
-        await _folderService.createFolder(folderName);
+        await widget.folderService!.createFolder(folderName);
         _loadFolders(); // Refresh folder list
       } catch (e) {
         print('[NotesMasterDetailScreen] Ошибка при создании папки: $e');
@@ -222,7 +235,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
               onPressed: () async {
                 Navigator.of(context).pop(); // Dismiss dialog
                 try {
-                  await _folderService.deleteFolder(folder.id);
+                  await widget.folderService!.deleteFolder(folder.id);
                   if (_selectedFolderId == folder.id) { // If the deleted folder was selected
                     setState(() {
                       _selectedFolderId = null; // Reset selection
@@ -277,7 +290,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
         // Assuming FolderService has an updateFolder method
         // You might need to implement this in folder_service.dart and backend
         // For now, we'll just update locally and reload
-        await _folderService.updateFolder(folder.id, newFolderName); // This method needs to be implemented
+        await widget.folderService!.updateFolder(folder.id, newFolderName); // This method needs to be implemented
         _loadFolders(); // Refresh folder list
       } catch (e) {
         print('[NotesMasterDetailScreen] Ошибка при переименовании папки: $e');
@@ -432,7 +445,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                                 _displayedNotes.removeWhere((n) => n.id == deletedNoteId); // Remove from local list immediately
                               });
                               try {
-                                await _noteService.deleteNote(deletedNoteId); // Delete from backend
+                                await widget.noteService!.deleteNote(deletedNoteId); // Delete from backend
                                 await _loadFolders(); // Refresh folders; will also refresh notes for current selection
                               } catch (e) {
                                 print('[NotesMasterDetailScreen] Ошибка при удалении заметки: $e');

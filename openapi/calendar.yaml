@@ -205,6 +205,62 @@ paths:
       responses:
         '204': { description: No Content }
 
+  /v1/events/expand:
+    get:
+      summary: Expand recurring events within a time window
+      operationId: expandEvents
+      parameters:
+        - in: query
+          name: timeMin
+          required: true
+          schema: { type: string, format: date-time }
+        - in: query
+          name: timeMax
+          required: true
+          schema: { type: string, format: date-time }
+        - in: query
+          name: calendarUid
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - in: query
+          name: q
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Event' }
+
+  /v1/events/{eventUid}:apply:
+    post:
+      summary: Apply scoped action to a recurring series
+      operationId: applyEvent
+      parameters:
+        - in: path
+          name: eventUid
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, enum: [update, delete] }
+                scope: { type: string, enum: [this, following, series] }
+                recurrenceId: { type: string, format: date-time }
+                patch: { type: object }
+      responses:
+        '200': { description: Applied }
+
   /v1/events/{eventUid}/reminders:
     parameters:
       - in: path
@@ -396,4 +452,3 @@ components:
         limit: { type: integer }
         nextCursor: { type: string, nullable: true }
         total: { type: integer, nullable: true }
-

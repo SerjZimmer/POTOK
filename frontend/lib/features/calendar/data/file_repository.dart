@@ -6,6 +6,12 @@ import 'package:flutter/foundation.dart';
 import '../domain/entities.dart';
 import '../services/rrule_service.dart';
 
+/// FileCalendarRepository — простое офлайн‑хранилище поверх JSON‑файла.
+///
+/// Зачем так:
+/// - не тянем зависимости (Drift/Isar) на этапе быстрых итераций;
+/// - легко посмотреть/почистить данные (файл в HOME);
+/// - API спроектирован так, чтобы безболезненно заменить реализацию на Drift.
 class FileCalendarRepository {
   final String filePath;
   List<CalendarEntity> _calendars = [];
@@ -23,6 +29,8 @@ class FileCalendarRepository {
     return 'calendar_store.json';
   }
 
+  /// Лениво загружаем данные один раз, при необходимости создаем файл
+  /// с дефолтным календарем «Личный».
   Future<void> _ensureLoaded() async {
     if (_loaded) return;
     try {
@@ -55,11 +63,13 @@ class FileCalendarRepository {
     await f.writeAsString(data);
   }
 
+  /// Возвращает список календарей (пока только локальные).
   Future<List<CalendarEntity>> listCalendars() async {
     await _ensureLoaded();
     return List.unmodifiable(_calendars);
   }
 
+  /// Создание события (в том числе повторяющегося). Сохранение на диск синхронно.
   Future<EventEntity> createEvent(EventEntity event) async {
     await _ensureLoaded();
     _events.add(event);
@@ -87,12 +97,16 @@ class FileCalendarRepository {
     }
   }
 
+  /// Возвращает экземпляры событий, попадающих в [fromUtc, toUtc).
+  ///
+  /// Повторяющиеся события разворачиваются по окну через RRuleService.
   Future<List<EventEntity>> eventsInRange(DateTime fromUtc, DateTime toUtc) async {
     await _ensureLoaded();
     final rrule = RRuleService();
     final out = <EventEntity>[];
 
     // Split base events / overrides
+    // Override — отдельные записи, которые заменяют одиночные инстансы серии.
     final overrides = _events.where((e) => e.parentUid != null && e.recurrenceId != null).toList();
     final base = _events.where((e) => e.parentUid == null).toList();
 
@@ -139,7 +153,7 @@ class FileCalendarRepository {
     return out;
   }
 
-  // Edits
+  // === Операции редактирования/удаления серий и инстансов ===
   Future<void> deleteSingleOccurrence(String parentUid, DateTime recurrenceId) async {
     await _ensureLoaded();
     final i = _events.indexWhere((e) => e.uid == parentUid && e.parentUid == null);
@@ -162,6 +176,7 @@ class FileCalendarRepository {
     await _persist();
   }
 
+  /// Создает или обновляет override для конкретного повторения.
   Future<void> upsertSingleOverride({
     required EventEntity base,
     required DateTime recurrenceId,
@@ -196,6 +211,7 @@ class FileCalendarRepository {
     await _persist();
   }
 
+  /// Удаляет override и убирает соответствующий EXDATE — восстанавливает базовый инстанс.
   Future<void> deleteOverrideAndRestore(String parentUid, DateTime recurrenceId) async {
     await _ensureLoaded();
     final rid = recurrenceId.toUtc().toIso8601String();
@@ -222,13 +238,18 @@ class FileCalendarRepository {
     await _persist();
   }
 
+  /// Полное удаление серии (включая все override).
   Future<void> deleteSeries(String parentUid) async {
     await _ensureLoaded();
     _events.removeWhere((e) => e.uid == parentUid || e.parentUid == parentUid);
     await _persist();
   }
 
-  // Cut the original series to exclude [fromUtcAndAfter) and optionally create a new series starting at fromUtcAndAfter.
+  /// Разрезает серию на «до» и «после» указанного инстанса.
+  ///
+  /// 1) Ставит UNTIL на исходной RRULE (до момента split-1сек).
+  /// 2) Удаляет override-инстансы на и после точки разреза.
+  /// 3) Опционально создает новую серию (newSeries) начиная с точки разреза.
   Future<void> applyFollowingEdit({
     required String parentUid,
     required DateTime fromUtcAndAfter,

@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
-import '../data/file_repository.dart';
+import '../data/api_repository.dart';
 import '../domain/entities.dart';
 
+/// Редактор события (создание/изменение/удаление).
+///
+/// Поддерживает выбор области действия при работе с сериями:
+/// - только этот инстанс → создается override (RECURRENCE-ID) и EXDATE в базе;
+/// - это и все последующие → серия разрезается, создается новая серия;
+/// - вся серия → обновляется/удаляется базовая запись.
 class EventEditorPage extends StatefulWidget {
   final DateTime? initialDay;
-  final FileCalendarRepository repo;
+  final ApiCalendarRepository repo;
   final EventEntity? event; // if provided -> edit mode (series level)
   const EventEditorPage({super.key, this.initialDay, required this.repo, this.event});
 
@@ -23,6 +29,10 @@ class _EventEditorPageState extends State<EventEditorPage> {
   List<CalendarEntity> _calendars = [];
   String _repeat = 'none';
   EventEntity? _editing;
+  // Ограничение повтора: 'never' | 'until' | 'count'
+  String _repeatEndMode = 'until';
+  DateTime? _repeatUntil;
+  int? _repeatCount;
 
   @override
   void initState() {
@@ -35,6 +45,20 @@ class _EventEditorPageState extends State<EventEditorPage> {
       _start = widget.event!.startUtc;
       _end = widget.event!.endUtc;
       _repeat = _detectRepeat(widget.event!.recurrenceRule);
+      // Инициализируем ограничения из RRULE (UNTIL/COUNT), если они есть
+      final rr = widget.event!.recurrenceRule;
+      if (rr != null && rr.isNotEmpty) {
+        final m = _parseRRule(rr);
+        if (m['UNTIL'] != null && m['UNTIL']!.isNotEmpty) {
+          _repeatEndMode = 'until';
+          _repeatUntil = _parseRRuleDate(m['UNTIL']!);
+        } else if (m['COUNT'] != null && m['COUNT']!.isNotEmpty) {
+          _repeatEndMode = 'count';
+          _repeatCount = int.tryParse(m['COUNT']!);
+        } else {
+          _repeatEndMode = 'never';
+        }
+      }
     } else {
       final d = widget.initialDay ?? DateTime.now();
       _start = DateTime(d.year, d.month, d.day, 9).toUtc();
@@ -44,11 +68,20 @@ class _EventEditorPageState extends State<EventEditorPage> {
   }
 
   Future<void> _loadCalendars() async {
-    final list = await widget.repo.listCalendars();
-    setState(() {
-      _calendars = list;
-      _calendarUid = list.isNotEmpty ? list.first.uid : null;
-    });
+    try {
+      var list = await widget.repo.listCalendars();
+      CalendarEntity? created;
+      if (list.isEmpty) {
+        created = await widget.repo.createCalendar('Личный');
+        list = [created];
+      }
+      setState(() {
+        _calendars = list;
+        _calendarUid = (created?.uid) ?? (list.isNotEmpty ? list.first.uid : null);
+      });
+    } catch (_) {
+      // В случае ошибки сети оставим список пустым — пользователь увидит, что выбрать нечего
+    }
   }
 
   @override
@@ -110,7 +143,16 @@ class _EventEditorPageState extends State<EventEditorPage> {
               const Divider(),
               DropdownButtonFormField<String>(
                 value: _calendarUid,
-                items: _calendars.map((c) => DropdownMenuItem(value: c.uid, child: Text(c.name))).toList(),
+                items: _calendars.map((c) => DropdownMenuItem(
+                  value: c.uid,
+                  child: Row(
+                    children: [
+                      Container(width: 14, height: 14, decoration: BoxDecoration(color: _hexColor(c.colorHex), shape: BoxShape.circle)),
+                      const SizedBox(width: 8),
+                      Text(c.name),
+                    ],
+                  ),
+                )).toList(),
                 onChanged: (v) => setState(() => _calendarUid = v),
                 decoration: const InputDecoration(labelText: 'Календарь'),
               ),
@@ -136,6 +178,38 @@ class _EventEditorPageState extends State<EventEditorPage> {
                 onChanged: (v) => setState(() => _repeat = v ?? 'none'),
                 decoration: const InputDecoration(labelText: 'Повторение'),
               ),
+              if (_repeat != 'none') ...[
+                const SizedBox(height: 8),
+                const Text('Ограничение повтора', style: TextStyle(fontWeight: FontWeight.w600)),
+                RadioListTile<String>(
+                  value: 'never', groupValue: _repeatEndMode, onChanged: (v)=>setState(()=>_repeatEndMode=v!),
+                  title: const Text('Без окончания'),
+                ),
+                RadioListTile<String>(
+                  value: 'until', groupValue: _repeatEndMode, onChanged: (v)=>setState(()=>_repeatEndMode=v!),
+                  title: const Text('До даты'),
+                ),
+                if (_repeatEndMode=='until')
+                  ListTile(
+                    title: Text(_repeatUntil==null ? 'Выбрать дату окончания' : 'До: ${df(_repeatUntil!)}'),
+                    onTap: () async {
+                      final d = await showDatePicker(context: context, initialDate: (_repeatUntil ?? _start).toLocal(), firstDate: DateTime(1970), lastDate: DateTime(2100));
+                      if (d!=null) setState(()=> _repeatUntil = DateTime(d.year,d.month,d.day).toUtc());
+                    },
+                  ),
+                RadioListTile<String>(
+                  value: 'count', groupValue: _repeatEndMode, onChanged: (v)=>setState(()=>_repeatEndMode=v!),
+                  title: const Text('Количество повторов'),
+                ),
+                if (_repeatEndMode=='count')
+                  TextFormField(
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(hintText: 'Например, 10'),
+                    initialValue: _repeatCount?.toString(),
+                    onChanged: (v){ final n=int.tryParse(v); setState(()=>_repeatCount=n); },
+                    validator: (_){ if(_repeat!='none' && _repeatEndMode=='count'){ if((_repeatCount??0)<=0) return 'Введите число > 0'; } return null; },
+                  ),
+              ],
             ],
           ),
         ),
@@ -222,23 +296,35 @@ class _EventEditorPageState extends State<EventEditorPage> {
 
   String? _buildRRule({String? existing}) {
     if (_repeat == 'custom') return existing; // keep as-is
+    String endClause() {
+      if (_repeatEndMode == 'until' && _repeatUntil != null) {
+        final u = _repeatUntil!;
+        String two(int v) => v.toString().padLeft(2,'0');
+        return ';UNTIL=${u.year}${two(u.month)}${two(u.day)}T235959Z';
+      }
+      if (_repeatEndMode == 'count' && (_repeatCount ?? 0) > 0) {
+        return ';COUNT=${_repeatCount}';
+      }
+      // по умолчанию ограничим годом, чтобы не разливаться бесконечно
+      return ';UNTIL=${_until1y()}';
+    }
     switch (_repeat) {
       case 'daily':
-        return 'FREQ=DAILY;INTERVAL=1;UNTIL=${_until1y()}';
+        return 'FREQ=DAILY;INTERVAL=1' + endClause();
       case 'weekly':
         final wd = ['MO','TU','WE','TH','FR','SA','SU'][_start.toLocal().weekday - 1];
-        return 'FREQ=WEEKLY;BYDAY=$wd;UNTIL=${_until1y()}';
+        return 'FREQ=WEEKLY;BYDAY=$wd' + endClause();
       case 'workdays':
-        return 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=${_until1y()}';
+        return 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' + endClause();
       case 'monthly':
-        return 'FREQ=MONTHLY;BYMONTHDAY=${_start.toLocal().day};UNTIL=${_until1y()}';
+        return 'FREQ=MONTHLY;BYMONTHDAY=${_start.toLocal().day}' + endClause();
       case 'monthly_wday':
         final wd = ['MO','TU','WE','TH','FR','SA','SU'][_start.toLocal().weekday - 1];
         final day = _start.toLocal().day;
         final pos = ((day - 1) ~/ 7) + 1; // 1..5
-        return 'FREQ=MONTHLY;BYDAY=${pos.toString()}$wd;UNTIL=${_until1y()}';
+        return 'FREQ=MONTHLY;BYDAY=${pos.toString()}$wd' + endClause();
       case 'yearly':
-        return 'FREQ=YEARLY;BYMONTH=${_start.toLocal().month};BYMONTHDAY=${_start.toLocal().day};UNTIL=${_until1y()}';
+        return 'FREQ=YEARLY;BYMONTH=${_start.toLocal().month};BYMONTHDAY=${_start.toLocal().day}' + endClause();
       default:
         return null;
     }
@@ -278,10 +364,14 @@ class _EventEditorPageState extends State<EventEditorPage> {
             isAllDay: _allDay,
             tzid: 'UTC',
           );
-          final base = await widget.repo.getEvent(baseUid);
-          if (base != null) {
-            await widget.repo.upsertSingleOverride(base: base, recurrenceId: recurrenceId, overrideData: data);
-          }
+          await widget.repo.apply(baseUid, action: 'update', scope: 'this', recurrenceId: recurrenceId.toIso8601String(), patch: {
+            'title': _titleCtrl.text.trim(),
+            if (_descCtrl.text.trim().isNotEmpty) 'description': _descCtrl.text.trim(),
+            'startUtc': _start.toUtc().toIso8601String(),
+            'endUtc': (_end.isAfter(_start) ? _end : _start.add(const Duration(hours:1))).toUtc().toIso8601String(),
+            'isAllDay': _allDay,
+            'tzid': 'UTC',
+          });
           if (mounted) Navigator.of(context).pop(true);
           return;
         }
@@ -306,15 +396,31 @@ class _EventEditorPageState extends State<EventEditorPage> {
             tzid: 'UTC',
             recurrenceRule: _buildRRule(existing: _editing?.recurrenceRule),
           );
-          await widget.repo.applyFollowingEdit(parentUid: baseUid, fromUtcAndAfter: recurrenceId, newSeries: newSeries);
+          await widget.repo.apply(baseUid, action: 'update', scope: 'following', recurrenceId: recurrenceId.toIso8601String(), patch: {
+            'title': newSeries.title,
+            if (newSeries.description != null) 'description': newSeries.description,
+            'startUtc': newSeries.startUtc.toUtc().toIso8601String(),
+            'endUtc': newSeries.endUtc.toUtc().toIso8601String(),
+            'isAllDay': newSeries.isAllDay,
+            'tzid': newSeries.tzid,
+            if (newSeries.recurrenceRule != null) 'recurrenceRule': newSeries.recurrenceRule,
+          });
           if (mounted) Navigator.of(context).pop(true);
           return;
         }
         if (choice == 'series') {
-          // Save on base event
+          // Сохраняем изменения на базовой серии через apply scope=series
           final baseUid = isSeriesOcc ? _editing!.parentUid! : _editing!.uid;
-          _editing = await widget.repo.getEvent(baseUid);
-          await _save();
+          await widget.repo.apply(baseUid, action: 'update', scope: 'series', patch: {
+            'title': _titleCtrl.text.trim(),
+            if (_descCtrl.text.trim().isNotEmpty) 'description': _descCtrl.text.trim(),
+            'startUtc': _start.toUtc().toIso8601String(),
+            'endUtc': (_end.isAfter(_start) ? _end : _start.add(const Duration(hours:1))).toUtc().toIso8601String(),
+            'isAllDay': _allDay,
+            'tzid': 'UTC',
+            'recurrenceRule': _buildRRule(existing: _editing?.recurrenceRule),
+          });
+          if (mounted) Navigator.of(context).pop(true);
           return;
         }
         return; // cancelled
@@ -329,7 +435,7 @@ class _EventEditorPageState extends State<EventEditorPage> {
     final isSeriesOcc = _editing!.parentUid != null && _editing!.recurrenceRule != null;
     final isBaseRecurring = _editing!.parentUid == null && (_editing!.recurrenceRule?.isNotEmpty ?? false);
     if (isOverride) {
-      await widget.repo.deleteOverrideAndRestore(_editing!.parentUid!, DateTime.parse(_editing!.recurrenceId!));
+      await widget.repo.apply(_editing!.parentUid!, action: 'delete', scope: 'this', recurrenceId: _editing!.recurrenceId);
       if (mounted) Navigator.of(context).pop(true);
       return;
     }
@@ -341,20 +447,20 @@ class _EventEditorPageState extends State<EventEditorPage> {
       if (choice == 'this') {
         final parentUid = isSeriesOcc ? _editing!.parentUid! : _editing!.uid;
         final rid = DateTime.parse(_editing!.recurrenceId ?? _editing!.startUtc.toIso8601String());
-        await widget.repo.deleteSingleOccurrence(parentUid, rid);
+        await widget.repo.apply(parentUid, action: 'delete', scope: 'this', recurrenceId: rid.toUtc().toIso8601String());
         if (mounted) Navigator.of(context).pop(true);
         return;
       }
       if (choice == 'following') {
         final parentUid = isSeriesOcc ? _editing!.parentUid! : _editing!.uid;
         final rid = DateTime.parse(_editing!.recurrenceId ?? _editing!.startUtc.toIso8601String());
-        await widget.repo.applyFollowingEdit(parentUid: parentUid, fromUtcAndAfter: rid, newSeries: null);
+        await widget.repo.apply(parentUid, action: 'delete', scope: 'following', recurrenceId: rid.toUtc().toIso8601String());
         if (mounted) Navigator.of(context).pop(true);
         return;
       }
       if (choice == 'series') {
         final parentUid = isSeriesOcc ? _editing!.parentUid! : _editing!.uid;
-        await widget.repo.deleteSeries(parentUid);
+        await widget.repo.apply(parentUid, action: 'delete', scope: 'series');
         if (mounted) Navigator.of(context).pop(true);
         return;
       }
@@ -402,6 +508,13 @@ class _ScopeSheet extends StatelessWidget {
   }
 }
 
+// Хелпер перевода HEX (#RRGGBB или #AARRGGBB) в Color для отображения
+Color _hexColor(String hex){
+  var h = hex.replaceAll('#','');
+  if(h.length==6) h='FF$h';
+  return Color(int.parse(h, radix:16));
+}
+
 String _detectRepeat(String? rrule) {
   if (rrule == null || rrule.isEmpty) return 'none';
   final u = rrule.toUpperCase();
@@ -412,4 +525,19 @@ String _detectRepeat(String? rrule) {
   if (u.startsWith('FREQ=MONTHLY') && RegExp(r'BYDAY=[+-]?\d+(MO|TU|WE|TH|FR|SA|SU)').hasMatch(u)) return 'monthly_wday';
   if (u.startsWith('FREQ=YEARLY') && u.contains('BYMONTH=') && u.contains('BYMONTHDAY=')) return 'yearly';
   return 'custom';
+}
+
+Map<String,String> _parseRRule(String s){
+  final map=<String,String>{};
+  for(final part in s.split(';')){
+    if(part.isEmpty) continue; final kv=part.split('='); if(kv.length==2){ map[kv[0].toUpperCase()]=kv[1]; }
+  }
+  return map;
+}
+DateTime? _parseRRuleDate(String s){
+  try{
+    if(s.endsWith('Z')){
+      return DateTime.parse(s.substring(0,4)+'-'+s.substring(4,6)+'-'+s.substring(6,8)+'T'+s.substring(9,11)+':'+s.substring(11,13)+':'+s.substring(13,15)+'Z').toUtc();
+    } else { return DateTime.parse(s.substring(0,4)+'-'+s.substring(4,6)+'-'+s.substring(6,8)).toUtc(); }
+  }catch(_){return null;}
 }

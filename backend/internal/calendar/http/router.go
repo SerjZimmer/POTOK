@@ -1,3 +1,6 @@
+// Пакет httpapi инкапсулирует HTTP‑маршруты календаря. Он не содержит
+// бизнес‑логики — только связывает транспорт (chi) с интерфейсами сервисов
+// (CalendarService/EventService/Reminder/Sync).
 package httpapi
 
 import (
@@ -18,30 +21,36 @@ type Router struct {
     sync      service.SyncService
 }
 
-func NewRouter() http.Handler {
+// NewRouterWithServices позволяет передать конкретные реализации сервисов
+// (например, SQLite в production или in-memory в тестах) и получить готовый
+// http.Handler.
+func NewRouterWithServices(calSvc service.CalendarService, evSvc service.EventService, remSvc service.ReminderService, syncSvc service.SyncService) http.Handler {
     r := chi.NewRouter()
     r.Use(mw.RequestID, mw.Logging, mw.Auth)
 
     api := &Router{
-        calendars: service.NoopCalendarService{},
-        events:    service.NoopEventService{},
-        reminders: service.NoopReminderService{},
-        sync:      service.NoopSyncService{},
+        calendars: calSvc,
+        events:    evSvc,
+        reminders: remSvc,
+        sync:      syncSvc,
     }
 
-    // Calendars
+    // Calendars — CRUD календарей
     r.Get("/v1/calendars", api.listCalendars)
     r.Post("/v1/calendars", api.createCalendar)
     r.Get("/v1/calendars/{calendarUid}", api.getCalendar)
     r.Patch("/v1/calendars/{calendarUid}", api.patchCalendar)
     r.Delete("/v1/calendars/{calendarUid}", api.deleteCalendar)
 
-    // Events
+    // Events — CRUD событий (без логики повторов)
     r.Get("/v1/events", api.listEvents)
     r.Post("/v1/events", api.createEvent)
     r.Get("/v1/events/{eventUid}", api.getEvent)
     r.Patch("/v1/events/{eventUid}", api.patchEvent)
     r.Delete("/v1/events/{eventUid}", api.deleteEvent)
+    // Expansion and scoped apply — серверная экспансия и операции над сериями
+    r.Get("/v1/events/expand", api.expandEvents)
+    r.Post("/v1/events/{eventUid}:apply", api.applyEventAction)
 
     // Reminders
     r.Get("/v1/events/{eventUid}/reminders", api.listReminders)
@@ -129,6 +138,52 @@ func (rt *Router) deleteEvent(w http.ResponseWriter, r *http.Request) {
     w.WriteHeader(http.StatusNoContent)
 }
 
+// expand occurrences in a window
+// expandEvents — возвращает развёрнутые инстансы событий в окне [timeMin,timeMax).
+// Фильтры: calendarUid[], q. Ответ: { items: [Event] } — где Event уже отражает
+// замену базовых инстансов override‑ами и исключение EXDATE.
+func (rt *Router) expandEvents(w http.ResponseWriter, r *http.Request) {
+    q := r.URL.Query()
+    timeMin := q.Get("timeMin")
+    timeMax := q.Get("timeMax")
+    if timeMin == "" || timeMax == "" {
+        respond(w, http.StatusBadRequest, model.ErrorResponse{Code: "bad_request", Message: "timeMin and timeMax required"}, "")
+        return
+    }
+    items, err := rt.events.Expand(r.Context(), timeMin, timeMax, q["calendarUid"], q.Get("q"))
+    if err != nil {
+        respond(w, http.StatusInternalServerError, model.ErrorResponse{Code: "expand_failed", Message: err.Error()}, "")
+        return
+    }
+    respond(w, http.StatusOK, map[string]any{"items": items}, "")
+}
+
+// apply scoped operation to a recurring series or a single instance
+// applyEventAction — применяет действие к серии/инстансам:
+//   action: update|delete, scope: this|following|series, recurrenceId, patch.
+// Детальная логика реализована в EventService.Apply.
+func (rt *Router) applyEventAction(w http.ResponseWriter, r *http.Request) {
+    uid := chi.URLParam(r, "eventUid")
+    var body struct {
+        Action string                 `json:"action"` // update|delete
+        Scope  string                 `json:"scope"`  // this|following|series
+        Patch  map[string]interface{} `json:"patch"`
+        RecurrenceID string           `json:"recurrenceId"` // ISO8601 UTC for target instance
+    }
+    if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+        respond(w, http.StatusBadRequest, model.ErrorResponse{Code: "bad_request", Message: "invalid json"}, "")
+        return
+    }
+    if body.Scope == "" { body.Scope = "series" }
+    if body.Action == "" { body.Action = "update" }
+    res, err := rt.events.Apply(r.Context(), uid, body.Action, body.Scope, body.RecurrenceID, body.Patch)
+    if err != nil {
+        respond(w, http.StatusBadRequest, model.ErrorResponse{Code: "apply_failed", Message: err.Error()}, "")
+        return
+    }
+    respond(w, http.StatusOK, res, "")
+}
+
 func (rt *Router) listReminders(w http.ResponseWriter, r *http.Request) {
     uid := chi.URLParam(r, "eventUid")
     items, _ := rt.reminders.List(r.Context(), uid)
@@ -171,4 +226,3 @@ func respond(w http.ResponseWriter, status int, payload interface{}, etag string
     if payload == nil { return }
     _ = json.NewEncoder(w).Encode(payload)
 }
-

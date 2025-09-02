@@ -12,13 +12,16 @@ import (
 
 // Store предоставляет методы для взаимодействия с хранилищем данных (базой данных).
 type Store struct {
-	db *sql.DB
+    db *sql.DB
 }
 
 // New создает новый экземпляр Store.
 func New(db *sql.DB) *Store {
-	return &Store{db: db}
+    return &Store{db: db}
 }
+
+// DB возвращает внутреннее подключение к БД для других подсистем (например, календаря).
+func (s *Store) DB() *sql.DB { return s.db }
 
 // --- Методы для Папок ---
 
