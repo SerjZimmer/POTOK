@@ -103,7 +103,7 @@ class _EventEditorPageState extends State<EventEditorPage> {
         actions: [
           if (_editing != null)
             IconButton(
-              icon: const Icon(Icons.delete, color: Colors.amber),
+              icon: const Icon(Icons.delete_outline, color: Colors.amber),
               onPressed: _onDeletePressed,
               tooltip: 'Удалить',
             ),
@@ -111,7 +111,7 @@ class _EventEditorPageState extends State<EventEditorPage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _onSavePressed,
-        child: const Icon(Icons.check),
+        child: const Icon(Icons.check_circle_outline),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -487,17 +487,17 @@ class _ScopeSheet extends StatelessWidget {
         children: [
           ListTile(title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold))),
           ListTile(
-            leading: const Icon(Icons.filter_1, color: Colors.amber),
+            leading: const Icon(Icons.filter_1_outlined, color: Colors.amber),
             title: Text(onlyThis),
             onTap: () => Navigator.of(context).pop('this'),
           ),
           ListTile(
-            leading: const Icon(Icons.trending_flat, color: Colors.amber),
+            leading: const Icon(Icons.trending_flat_outlined, color: Colors.amber),
             title: Text(following),
             onTap: () => Navigator.of(context).pop('following'),
           ),
           ListTile(
-            leading: const Icon(Icons.all_inclusive, color: Colors.amber),
+            leading: const Icon(Icons.all_inclusive_outlined, color: Colors.amber),
             title: Text(series),
             onTap: () => Navigator.of(context).pop('series'),
           ),

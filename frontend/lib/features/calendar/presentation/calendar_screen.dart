@@ -42,16 +42,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
         actions: [
           IconButton(
             tooltip: 'Назад',
-            icon: const Icon(Icons.chevron_left, color: Colors.amber),
+            icon: const Icon(Icons.chevron_left_outlined, color: Colors.amber),
             onPressed: () async { await _step(-1); },
           ),
           IconButton(
             tooltip: 'Вперёд',
-            icon: const Icon(Icons.chevron_right, color: Colors.amber),
+            icon: const Icon(Icons.chevron_right_outlined, color: Colors.amber),
             onPressed: () async { await _step(1); },
           ),
           PopupMenuButton<CalendarView>(
-            icon: const Icon(Icons.view_agenda, color: Colors.amber),
+            icon: const Icon(Icons.view_agenda_outlined, color: Colors.amber),
             onSelected: (v) => _setView(v),
             itemBuilder: (context) => [
               _item('Месяц', CalendarView.month),
@@ -63,7 +63,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
           IconButton(
             tooltip: 'Календари',
-            icon: const Icon(Icons.palette, color: Colors.amber),
+            icon: const Icon(Icons.palette_outlined, color: Colors.amber),
             onPressed: () async {
               await showDialog(context: context, builder: (_) => _ManageCalendarsDialog(repo: _repo));
               await _reloadCalendars();
@@ -76,7 +76,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         onPressed: _createEvent,
         backgroundColor: Colors.amber,
         foregroundColor: Colors.black,
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add_circle_outline),
       ),
       body: _buildView(),
     );
@@ -491,7 +491,7 @@ class _DayListView extends StatelessWidget {
       child: ListTile(
         title: Text(e.title),
         subtitle: Text(time),
-        leading: const Icon(Icons.event, color: Colors.amber),
+        leading: const Icon(Icons.event_outlined, color: Colors.amber),
         onTap: onEdit == null ? null : () => onEdit!(e),
       ),
     );
@@ -564,7 +564,7 @@ class _AgendaListView extends StatelessWidget {
         if (idx == keys.length) {
           return Padding(
             padding: const EdgeInsets.all(12.0),
-            child: ElevatedButton.icon(onPressed: onAdd, icon: const Icon(Icons.add), label: const Text('Добавить событие')),
+            child: ElevatedButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_circle_outline), label: const Text('Добавить событие')),
           );
         }
         final key = keys[idx];
@@ -644,7 +644,7 @@ class _ManageCalendarsDialogState extends State<_ManageCalendarsDialog> {
                 leading: Container(width:18,height:18,decoration: BoxDecoration(color: _hexColor(c.colorHex), shape: BoxShape.circle)),
                 title: Text(c.name),
                 trailing: IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.amber),
+                  icon: const Icon(Icons.edit_outlined, color: Colors.amber),
                   onPressed: () async { await _edit(c); await _load(); },
                 ),
               ),
@@ -653,7 +653,7 @@ class _ManageCalendarsDialogState extends State<_ManageCalendarsDialog> {
               alignment: Alignment.centerLeft,
               child: ElevatedButton.icon(
                 onPressed: () async { await _create(); await _load(); },
-                icon: const Icon(Icons.add),
+                icon: const Icon(Icons.add_circle_outline),
                 label: const Text('Создать календарь'),
               ),
             )

@@ -56,7 +56,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         foregroundColor: Colors.black,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios),
+          icon: const Icon(Icons.arrow_back_ios_outlined),
           onPressed: () => Navigator.pop(context), // Go back
         ),
         // Динамически устанавливаем заголовок в зависимости от режима (создание или редактирование).
@@ -64,12 +64,12 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         // Добавляем кнопку сохранения на панель приложения.
         actions: [
           IconButton(
-            icon: const Icon(Icons.save, color: Colors.amber), // Save icon
+            icon: const Icon(Icons.save_outlined, color: Colors.amber), // Save icon
             onPressed: _saveNote, // При нажатии вызываем метод _saveNote.
           ),
           if (widget.note != null) // Only show delete button for existing notes
             IconButton(
-              icon: const Icon(Icons.delete, color: Colors.redAccent),
+              icon: const Icon(Icons.delete_outline, color: Colors.amber),
               onPressed: () {
                 // Show confirmation dialog before deleting
                 showDialog(

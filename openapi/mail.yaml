@@ -1,0 +1,972 @@
+openapi: 3.1.0
+info:
+  title: POTOK Mail API
+  version: 0.1.0
+  description: REST API for Mail module - email accounts, mailboxes, threads and messages management
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      operationId: getHealthz
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /v1/mail/accounts:
+    get:
+      summary: List mail accounts
+      operationId: listMailAccounts
+      parameters:
+        - in: query
+          name: include_disabled
+          schema:
+            type: boolean
+            default: false
+          description: Include disabled accounts
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Account'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+    post:
+      summary: Create/connect mail account
+      operationId: createMailAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/ProviderAuthRequest'
+                - $ref: '#/components/schemas/ImapAuthRequest'
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Account already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/mail/accounts/{accountUid}:
+    parameters:
+      - in: path
+        name: accountUid
+        required: true
+        schema:
+          type: string
+        description: Account unique identifier
+    get:
+      summary: Get mail account
+      operationId: getMailAccount
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      summary: Update mail account
+      operationId: updateMailAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountUpdate'
+      responses:
+        '200':
+          description: Account updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          description: Account not found
+        '409':
+          description: Update conflict
+    delete:
+      summary: Delete mail account
+      operationId: deleteMailAccount
+      responses:
+        '204':
+          description: Account deleted
+        '404':
+          description: Account not found
+
+  /v1/mail/accounts/{accountUid}/mailboxes:
+    parameters:
+      - in: path
+        name: accountUid
+        required: true
+        schema:
+          type: string
+    get:
+      summary: List account mailboxes
+      operationId: listAccountMailboxes
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Mailbox'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+
+  /v1/mail/accounts/{accountUid}/threads:
+    parameters:
+      - in: path
+        name: accountUid
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: mailbox
+        schema:
+          type: string
+          default: "INBOX"
+        description: Mailbox name/ID
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: Search query
+      - in: query
+        name: pageToken
+        schema:
+          type: string
+        description: Pagination token
+      - in: query
+        name: since
+        schema:
+          type: string
+          format: date-time
+        description: Filter since date
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          default: 50
+          maximum: 100
+        description: Page size
+    get:
+      summary: List account threads
+      operationId: listAccountThreads
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Thread'
+                  nextPageToken:
+                    type: string
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+
+  /v1/mail/threads/{threadId}:
+    parameters:
+      - in: path
+        name: threadId
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get thread with messages
+      operationId: getThread
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadDetail'
+        '404':
+          description: Thread not found
+
+  /v1/mail/messages/{messageId}:
+    parameters:
+      - in: path
+        name: messageId
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get message
+      operationId: getMessage
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          description: Message not found
+
+  /v1/mail/messages/{messageId}/attachments/{attachmentId}:
+    parameters:
+      - in: path
+        name: messageId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: attachmentId
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Download attachment
+      operationId: downloadAttachment
+      responses:
+        '200':
+          description: OK
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Attachment not found
+
+  /v1/mail/send:
+    post:
+      summary: Send message
+      operationId: sendMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendRequest'
+      responses:
+        '202':
+          description: Message queued for sending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendResponse'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+
+  /v1/mail/drafts:
+    post:
+      summary: Create/update draft
+      operationId: createDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DraftRequest'
+      responses:
+        '201':
+          description: Draft created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Draft'
+        '400':
+          description: Invalid request
+
+  /v1/mail/messages/{messageId}/flags:
+    post:
+      summary: Set message flags
+      operationId: setMessageFlags
+      parameters:
+        - in: path
+          name: messageId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FlagsUpdate'
+      responses:
+        '200':
+          description: Flags updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          description: Message not found
+
+  /v1/mail/messages/{messageId}/move:
+    post:
+      summary: Move message to mailbox
+      operationId: moveMessage
+      parameters:
+        - in: path
+          name: messageId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveRequest'
+      responses:
+        '200':
+          description: Message moved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          description: Message not found
+
+  /v1/mail/messages/{messageId}:
+    delete:
+      summary: Delete message (move to trash)
+      operationId: deleteMessage
+      parameters:
+        - in: path
+          name: messageId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Message deleted
+        '404':
+          description: Message not found
+
+  /v1/mail/messages/{messageId}/permanent:
+    delete:
+      summary: Permanently delete message
+      operationId: deleteMessagePermanent
+      parameters:
+        - in: path
+          name: messageId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Message permanently deleted
+        '404':
+          description: Message not found
+
+  /v1/mail/oauth/{provider}/start:
+    post:
+      summary: Start OAuth flow
+      operationId: startOAuth
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [gmail, outlook, yandex, mailru]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthStartRequest'
+      responses:
+        '200':
+          description: OAuth URL generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthStartResponse'
+
+  /v1/mail/oauth/{provider}/callback:
+    post:
+      summary: Complete OAuth flow
+      operationId: completeOAuth
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [gmail, outlook, yandex, mailru]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthCallbackRequest'
+      responses:
+        '200':
+          description: OAuth completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthCallbackResponse'
+
+components:
+  schemas:
+    Account:
+      type: object
+      required:
+        - uid
+        - provider
+        - email
+        - createdAt
+        - updatedAt
+      properties:
+        uid:
+          type: string
+          description: Unique identifier
+        provider:
+          type: string
+          enum: [gmail, outlook, yandex, mailru, imap]
+          description: Email provider
+        email:
+          type: string
+          format: email
+          description: Email address
+        displayName:
+          type: string
+          description: Display name
+        avatarUrl:
+          type: string
+          format: uri
+          description: Avatar URL
+        isDefault:
+          type: boolean
+          default: false
+          description: Is default account
+        isVisible:
+          type: boolean
+          default: true
+          description: Visible in unified inbox
+        syncState:
+          type: object
+          description: Sync state (encrypted)
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        disabledAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    AccountUpdate:
+      type: object
+      properties:
+        displayName:
+          type: string
+        isDefault:
+          type: boolean
+        isVisible:
+          type: boolean
+        syncState:
+          type: object
+
+    ProviderAuthRequest:
+      type: object
+      required:
+        - provider
+        - email
+      properties:
+        provider:
+          type: string
+          enum: [gmail, outlook, yandex, mailru]
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+
+    ImapAuthRequest:
+      type: object
+      required:
+        - email
+        - imapHost
+        - imapPort
+        - smtpHost
+        - smtpPort
+        - username
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        imapHost:
+          type: string
+        imapPort:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        imapTLS:
+          type: boolean
+          default: true
+        smtpHost:
+          type: string
+        smtpPort:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        smtpTLS:
+          type: boolean
+          default: true
+        username:
+          type: string
+        password:
+          type: string
+          writeOnly: true
+
+    Mailbox:
+      type: object
+      required:
+        - id
+        - accountUid
+        - name
+        - role
+        - visible
+      properties:
+        id:
+          type: string
+        accountUid:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [inbox, sent, drafts, spam, trash, archive, custom]
+        remoteId:
+          type: string
+          description: Provider-specific ID
+        total:
+          type: integer
+          minimum: 0
+        unread:
+          type: integer
+          minimum: 0
+        order:
+          type: integer
+        visible:
+          type: boolean
+
+    Thread:
+      type: object
+      required:
+        - id
+        - accountUid
+        - subject
+        - lastFrom
+        - lastDate
+        - unreadCount
+      properties:
+        id:
+          type: string
+        accountUid:
+          type: string
+        mailboxId:
+          type: string
+          nullable: true
+        subject:
+          type: string
+        lastFrom:
+          type: string
+          description: Last sender email/name
+        lastSnippet:
+          type: string
+          description: Preview text
+        lastDate:
+          type: string
+          format: date-time
+        unreadCount:
+          type: integer
+          minimum: 0
+        flags:
+          type: object
+          properties:
+            pinned:
+              type: boolean
+            flagged:
+              type: boolean
+            answered:
+              type: boolean
+        remoteId:
+          type: string
+        hash:
+          type: string
+          description: Content hash for change detection
+
+    ThreadDetail:
+      allOf:
+        - $ref: '#/components/schemas/Thread'
+        - type: object
+          properties:
+            messages:
+              type: array
+              items:
+                $ref: '#/components/schemas/Message'
+
+    Message:
+      type: object
+      required:
+        - id
+        - threadId
+        - accountUid
+        - from
+        - date
+        - subject
+      properties:
+        id:
+          type: string
+        threadId:
+          type: string
+        accountUid:
+          type: string
+        remoteId:
+          type: string
+        headers:
+          type: object
+          description: Email headers (sanitized)
+        from:
+          type: string
+        to:
+          type: array
+          items:
+            type: string
+        cc:
+          type: array
+          items:
+            type: string
+        bcc:
+          type: array
+          items:
+            type: string
+        date:
+          type: string
+          format: date-time
+        subject:
+          type: string
+        bodyText:
+          type: string
+          description: Plain text body
+        bodyHtml:
+          type: string
+          description: HTML body (sanitized)
+        flags:
+          type: object
+          properties:
+            seen:
+              type: boolean
+            flagged:
+              type: boolean
+            answered:
+              type: boolean
+        size:
+          type: integer
+          minimum: 0
+        hasAttachments:
+          type: boolean
+        dkim:
+          type: object
+          nullable: true
+        spf:
+          type: object
+          nullable: true
+        dmarc:
+          type: object
+          nullable: true
+
+    Attachment:
+      type: object
+      required:
+        - id
+        - messageId
+        - filename
+        - mime
+        - size
+      properties:
+        id:
+          type: string
+        messageId:
+          type: string
+        filename:
+          type: string
+        mime:
+          type: string
+        size:
+          type: integer
+          minimum: 0
+        localPath:
+          type: string
+          nullable: true
+        remoteId:
+          type: string
+        downloadedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    SendRequest:
+      type: object
+      required:
+        - accountUid
+        - from
+        - to
+        - subject
+      properties:
+        accountUid:
+          type: string
+        from:
+          type: string
+        to:
+          type: array
+          items:
+            type: string
+        cc:
+          type: array
+          items:
+            type: string
+        bcc:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        bodyText:
+          type: string
+        bodyHtml:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: string
+          description: Attachment IDs
+
+    SendResponse:
+      type: object
+      required:
+        - messageId
+        - status
+      properties:
+        messageId:
+          type: string
+        status:
+          type: string
+          enum: [queued, sending, sent, failed]
+        queuePosition:
+          type: integer
+          description: Position in send queue
+
+    DraftRequest:
+      type: object
+      required:
+        - accountUid
+        - subject
+      properties:
+        accountUid:
+          type: string
+        from:
+          type: string
+        to:
+          type: array
+          items:
+            type: string
+        cc:
+          type: array
+          items:
+            type: string
+        bcc:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        bodyText:
+          type: string
+        bodyHtml:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: string
+
+    Draft:
+      allOf:
+        - $ref: '#/components/schemas/DraftRequest'
+        - type: object
+          required:
+            - id
+            - createdAt
+            - updatedAt
+          properties:
+            id:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    FlagsUpdate:
+      type: object
+      properties:
+        seen:
+          type: boolean
+        flagged:
+          type: boolean
+        answered:
+          type: boolean
+
+    MoveRequest:
+      type: object
+      required:
+        - mailboxId
+      properties:
+        mailboxId:
+          type: string
+        remoteId:
+          type: string
+          description: Provider-specific mailbox ID
+
+    OAuthStartRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+
+    OAuthStartResponse:
+      type: object
+      required:
+        - authUrl
+        - state
+      properties:
+        authUrl:
+          type: string
+          format: uri
+        state:
+          type: string
+          description: OAuth state parameter
+
+    OAuthCallbackRequest:
+      type: object
+      required:
+        - code
+        - state
+      properties:
+        code:
+          type: string
+          description: OAuth authorization code
+        state:
+          type: string
+          description: OAuth state parameter
+
+    OAuthCallbackResponse:
+      type: object
+      required:
+        - accountUid
+        - status
+      properties:
+        accountUid:
+          type: string
+        status:
+          type: string
+          enum: [success, failed]
+        error:
+          type: string
+          nullable: true
+
+    PageMeta:
+      type: object
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        limit:
+          type: integer
+          minimum: 1
+        hasNext:
+          type: boolean
+        hasPrev:
+          type: boolean
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Error message
+        details:
+          type: object
+          description: Additional error details

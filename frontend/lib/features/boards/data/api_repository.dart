@@ -184,6 +184,51 @@ class BoardsApiRepository {
     BoardsLogger.info('Задача удалена', ctx: {'id': id});
   }
 
+  Future<void> archiveDoneIssues(String boardId) async {
+    BoardsLogger.info('Архивация выполненных задач', ctx: {'boardId': boardId});
+    final res = await _c().post(Uri.parse('$baseUrl/v1/boards/$boardId/archive-done'));
+    if (res.statusCode != 204) {
+      BoardsLogger.error('Не удалось архивировать задачи', ctx: {'status': res.statusCode, 'body': res.body});
+      throw Exception('archiveDoneIssues ${res.statusCode}: ${res.body}');
+    }
+    BoardsLogger.info('Выполненные задачи архивированы');
+  }
+
+  // Archive
+  Future<List<Map<String, dynamic>>> listArchivedIssues() async {
+    BoardsLogger.info('Запрос архива задач');
+    final res = await _c().get(Uri.parse('$baseUrl/v1/archive/issues'));
+    if (res.statusCode != 200) {
+      BoardsLogger.error('Не удалось загрузить архив', ctx: {'status': res.statusCode, 'body': res.body});
+      throw Exception('listArchivedIssues ${res.statusCode}');
+    }
+    final data = (json.decode(res.body) as List).cast<Map<String, dynamic>>();
+    BoardsLogger.info('Архив загружен', ctx: {'count': data.length});
+    return data;
+  }
+
+  Future<void> deleteArchivedIssue(String id) async {
+    BoardsLogger.info('Удаление задачи из архива', ctx: {'id': id});
+    final res = await _c().delete(Uri.parse('$baseUrl/v1/archive/issues/$id'));
+    if (res.statusCode != 204) {
+      BoardsLogger.error('Не удалось удалить задачу из архива', ctx: {'status': res.statusCode, 'body': res.body});
+      throw Exception('deleteArchivedIssue ${res.statusCode}: ${res.body}');
+    }
+    BoardsLogger.info('Задача удалена из архива', ctx: {'id': id});
+  }
+
+  Future<Map<String, dynamic>> getArchivedIssue(String id) async {
+    BoardsLogger.info('Загрузка архивной задачи', ctx: {'id': id});
+    final res = await _c().get(Uri.parse('$baseUrl/v1/archive/issues/$id'));
+    if (res.statusCode != 200) {
+      BoardsLogger.error('Не удалось загрузить архивную задачу', ctx: {'status': res.statusCode, 'body': res.body});
+      throw Exception('getArchivedIssue ${res.statusCode}: ${res.body}');
+    }
+    final data = json.decode(res.body);
+    BoardsLogger.info('Архивная задача загружена', ctx: {'id': data['id']});
+    return data;
+  }
+
   Future<void> moveIssue(String issueId, String columnId, int position) async {
     BoardsLogger.info('Перемещение задачи', ctx: {'id': issueId, 'toColumn': columnId, 'position': position});
     final res = await _c().post(

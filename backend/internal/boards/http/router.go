@@ -40,6 +40,7 @@ func NewRouter(boards bsvc.BoardService, issues bsvc.IssueService) http.Handler 
     r.Get("/v1/boards", api.listBoards)        // Список досок
     r.Post("/v1/boards", api.createBoard)
     r.Delete("/v1/boards/{boardId}", api.deleteBoard)
+    r.Post("/v1/boards/{boardId}/archive-done", api.archiveDoneIssues)
     r.Get("/v1/boards/{boardId}/columns", api.listColumns)
     r.Post("/v1/boards/{boardId}/columns", api.addColumn)
     r.Patch("/v1/columns/{id}", api.patchColumn)
@@ -80,12 +81,19 @@ func NewRouter(boards bsvc.BoardService, issues bsvc.IssueService) http.Handler 
     // Tags
     r.Post("/v1/cards/{id}/tags:bulk", api.tagsBulk)
     r.Delete("/v1/cards/{id}/tags/{tag}", api.deleteTag)
+
+    // Archive
+    r.Get("/v1/archive/issues", api.listArchivedIssues)
+    r.Delete("/v1/archive/issues/{issueId}", api.deleteArchivedIssue)
+    r.Get("/v1/archive/issues/{issueId}", api.getArchivedIssue)
+
     return r
 }
 
 func (rt *Router) listBoards(w http.ResponseWriter, r *http.Request){ items, _ := rt.boards.List(r.Context()); respond(w, http.StatusOK, items) }
 func (rt *Router) createBoard(w http.ResponseWriter, r *http.Request){ var req struct{ Name string `json:"name"`; Type string `json:"type"`}; _=json.NewDecoder(r.Body).Decode(&req); b,err:=rt.boards.Create(r.Context(), req.Name, req.Type); if err!=nil{ http.Error(w, err.Error(), 400); return }; respond(w, http.StatusCreated, b) }
 func (rt *Router) deleteBoard(w http.ResponseWriter, r *http.Request){ id := chi.URLParam(r, "boardId"); if err := rt.boards.DeleteBoard(r.Context(), id); err != nil { http.Error(w, err.Error(), http.StatusInternalServerError); return }; w.WriteHeader(http.StatusNoContent) }
+func (rt *Router) archiveDoneIssues(w http.ResponseWriter, r *http.Request){ id := chi.URLParam(r, "boardId"); if err := rt.issues.ArchiveDoneIssues(r.Context(), id); err != nil { http.Error(w, err.Error(), http.StatusInternalServerError); return }; w.WriteHeader(http.StatusNoContent) }
 func (rt *Router) listColumns(w http.ResponseWriter, r *http.Request){ id:=chi.URLParam(r,"boardId"); items,_ := rt.boards.ListColumns(r.Context(), id); respond(w, http.StatusOK, items) }
 func (rt *Router) addColumn(w http.ResponseWriter, r *http.Request){ id:=chi.URLParam(r,"boardId"); var req struct{ Name string `json:"name"`; Wip *int `json:"wipLimit"`}; _=json.NewDecoder(r.Body).Decode(&req); c,err := rt.boards.AddColumn(r.Context(), id, req.Name, req.Wip); if err!=nil{ http.Error(w, err.Error(), 400); return }; respond(w, http.StatusCreated, c) }
 func (rt *Router) listIssues(w http.ResponseWriter, r *http.Request){
@@ -144,6 +152,34 @@ func (rt *Router) deleteComment(w http.ResponseWriter, r *http.Request){ id := c
 // Tags
 func (rt *Router) tagsBulk(w http.ResponseWriter, r *http.Request){ id := chi.URLParam(r, "id"); var req struct{ Tags []string `json:"tags"`}; _=json.NewDecoder(r.Body).Decode(&req); if err := rt.issues.SetTagsBulk(r.Context(), id, req.Tags); err!=nil { http.Error(w, err.Error(), 400); return }; w.WriteHeader(http.StatusNoContent) }
 func (rt *Router) deleteTag(w http.ResponseWriter, r *http.Request){ id := chi.URLParam(r, "id"); tag := chi.URLParam(r, "tag"); if err := rt.issues.DeleteTag(r.Context(), id, tag); err!=nil { http.Error(w, err.Error(), 400); return }; w.WriteHeader(http.StatusNoContent) }
+
+func (rt *Router) listArchivedIssues(w http.ResponseWriter, r *http.Request) {
+	items, err := rt.issues.ListArchivedIssues(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, http.StatusOK, items)
+}
+
+func (rt *Router) deleteArchivedIssue(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "issueId")
+	if err := rt.issues.DeleteArchivedIssue(r.Context(), id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (rt *Router) getArchivedIssue(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "issueId")
+	item, err := rt.issues.GetArchivedIssue(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	respond(w, http.StatusOK, item)
+}
 
 func (rt *Router) exportCSV(w http.ResponseWriter, r *http.Request){
     // Экспорт задач в простой CSV: summary,description,due_date,priority,labels

@@ -36,13 +36,13 @@ class _BoardSettingsScreenState extends State<BoardSettingsScreen>{
           SwitchListTile(value: (_notif['createCalendarEvent']??1)==1, onChanged: (v){ setState(()=> _notif['createCalendarEvent']= v?1:0); }, title: const Text('Создавать событие календаря')),
           SwitchListTile(value: (_notif['createDefaultReminders']??0)==1, onChanged: (v){ setState(()=> _notif['createDefaultReminders']= v?1:0); }, title: const Text('Создавать напоминания по умолчанию')),
           TextField(decoration: const InputDecoration(labelText: 'Напоминания (минуты, через запятую)'), controller: TextEditingController(text: (_notif['reminderOffsetsCsv']??'')?.toString() ?? ''), onChanged: (v){ _notif['reminderOffsetsCsv']= v.trim().isEmpty? null : v.trim(); }),
-          Align(alignment: Alignment.centerRight, child: ElevatedButton.icon(onPressed: () async { await widget.repo.putBoardNotifications(widget.boardId, _notif); if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Уведомления сохранены'))); }, icon: const Icon(Icons.save), label: const Text('Сохранить уведомления'))),
+          Align(alignment: Alignment.centerRight, child: ElevatedButton.icon(onPressed: () async { await widget.repo.putBoardNotifications(widget.boardId, _notif); if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Уведомления сохранены'))); }, icon: const Icon(Icons.save_outlined), label: const Text('Сохранить уведомления'))),
           const Divider(height:24),
-          Row(children:[ const Text('Приоритеты', style: TextStyle(fontWeight: FontWeight.bold)), const Spacer(), IconButton(onPressed: _addPriority, icon: const Icon(Icons.add)) ]),
+          Row(children:[ const Text('Приоритеты', style: TextStyle(fontWeight: FontWeight.bold)), const Spacer(), IconButton(onPressed: _addPriority, icon: const Icon(Icons.add_circle_outline)) ]),
           for(final p in _priorities)
             ListTile(title: Text('${p['label']} (${p['key']})'), subtitle: Text('${p['colorHex']}  • позиция ${p['position']}'), trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async { await widget.repo.deletePriority(widget.boardId, p['key'] as String); await _load(); })),
           const Divider(height:24),
-          Row(children:[ const Text('Поля', style: TextStyle(fontWeight: FontWeight.bold)), const Spacer(), IconButton(onPressed: _addField, icon: const Icon(Icons.add)) ]),
+          Row(children:[ const Text('Поля', style: TextStyle(fontWeight: FontWeight.bold)), const Spacer(), IconButton(onPressed: _addField, icon: const Icon(Icons.add_circle_outline)) ]),
           for(final f in _fields)
             ListTile(title: Text('${f['name']}'), subtitle: Text('тип: ${f['type']}${f['options']!=null? ' • options: ${f['options']}' : ''}')),
         ]),

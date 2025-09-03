@@ -70,6 +70,14 @@ type IssueService interface {
     Update(ctx context.Context, issueID string, patch map[string]interface{}) (bmodel.Issue, error)
     // Delete — удалить задачу.
     Delete(ctx context.Context, issueID string) error
+    // ArchiveDoneIssues — архивировать (удалить) задачи из колонок "Done".
+    ArchiveDoneIssues(ctx context.Context, boardID string) error
+    // ListArchivedIssues — вернуть все задачи из архива.
+    ListArchivedIssues(ctx context.Context) ([]bmodel.Issue, error)
+    // DeleteArchivedIssue — окончательно удалить задачу из архива.
+    DeleteArchivedIssue(ctx context.Context, issueID string) error
+    // GetArchivedIssue — получить одну задачу из архива по ID.
+    GetArchivedIssue(ctx context.Context, issueID string) (bmodel.Issue, error)
     // Checklist
     ListChecklist(ctx context.Context, issueID string) ([]map[string]interface{}, error)
     AddChecklistItem(ctx context.Context, issueID, text string, order int) (map[string]interface{}, error)
@@ -99,19 +107,59 @@ func (s *sqliteBoardService) List(ctx context.Context) ([]bmodel.Board, error) {
     return out, nil
 }
 func (s *sqliteBoardService) Create(ctx context.Context, name, btype string) (bmodel.Board, error) {
-    if name=="" { return bmodel.Board{}, errors.New("empty name") }
-    if btype=="" { btype = "kanban" }
-    b := bmodel.Board{ ID: uuid.New().String(), Name: name, Type: btype, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC() }
-    tx, err := s.db.BeginTx(ctx, nil)
-    if err != nil { return bmodel.Board{}, err }
-    if _, err := tx.ExecContext(ctx, `INSERT INTO boards(id,name,type,created_at,updated_at) VALUES (?,?,?,?,?)`, b.ID,b.Name,b.Type,b.CreatedAt.Format(time.RFC3339),b.UpdatedAt.Format(time.RFC3339)); err!=nil { tx.Rollback(); return bmodel.Board{}, err }
-    // Default columns: To Do, In Progress, Done
-    now := time.Now().UTC().Format(time.RFC3339)
-    defaults := []struct{ name string; pos int }{{"To Do",1},{"In Progress",2},{"Done",3}}
-    for _,d := range defaults {
-        if _, err := tx.ExecContext(ctx, `INSERT INTO board_columns(id,board_id,name,wip_limit,position,created_at,updated_at) VALUES (?,?,?,?,?,?,?)`, uuid.New().String(), b.ID, d.name, nil, d.pos, now, now); err != nil { tx.Rollback(); return bmodel.Board{}, err }
+    if name == "" {
+        return bmodel.Board{}, errors.New("empty name")
     }
-    if err := tx.Commit(); err != nil { return bmodel.Board{}, err }
+    if btype == "" {
+        btype = "kanban"
+    }
+    b := bmodel.Board{ID: uuid.New().String(), Name: name, Type: btype, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+    tx, err := s.db.BeginTx(ctx, nil)
+    if err != nil {
+        return bmodel.Board{}, err
+    }
+    // В случае ошибки откатываем транзакцию
+    defer tx.Rollback()
+
+    // Создаём доску
+    if _, err := tx.ExecContext(ctx, `INSERT INTO boards(id,name,type,created_at,updated_at) VALUES (?,?,?,?,?)`, b.ID, b.Name, b.Type, b.CreatedAt.Format(time.RFC3339), b.UpdatedAt.Format(time.RFC3339)); err != nil {
+        return bmodel.Board{}, err
+    }
+
+    // Создаём колонки по умолчанию
+    now := time.Now().UTC().Format(time.RFC3339)
+    defaultColumns := []struct {
+        name string
+        pos  int
+    }{{"To Do", 1}, {"In Progress", 2}, {"Done", 3}}
+    for _, d := range defaultColumns {
+        if _, err := tx.ExecContext(ctx, `INSERT INTO board_columns(id,board_id,name,wip_limit,position,created_at,updated_at) VALUES (?,?,?,?,?,?,?)`, uuid.New().String(), b.ID, d.name, nil, d.pos, now, now); err != nil {
+            return bmodel.Board{}, err
+        }
+    }
+
+    // Создаём приоритеты по умолчанию
+    defaultPriorities := []struct {
+        key      string
+        label    string
+        color    string
+        position int
+    }{
+        {"HIGHEST", "Highest", "#F44336", 1},
+        {"HIGH", "High", "#FF9800", 2},
+        {"MEDIUM", "Medium", "#2196F3", 3},
+        {"LOW", "Low", "#4CAF50", 4},
+    }
+    for _, p := range defaultPriorities {
+        if _, err := tx.ExecContext(ctx, `INSERT INTO board_priorities(board_id,pkey,label,color_hex,position) VALUES (?,?,?,?,?)`, b.ID, p.key, p.label, p.color, p.position); err != nil {
+            return bmodel.Board{}, err
+        }
+    }
+
+    // Завершаем транзакцию
+    if err := tx.Commit(); err != nil {
+        return bmodel.Board{}, err
+    }
     return b, nil
 }
 func (s *sqliteBoardService) AddColumn(ctx context.Context, boardID, name string, wip *int) (bmodel.Column, error) {
@@ -412,6 +460,111 @@ func (s *sqliteIssueService) Delete(ctx context.Context, issueID string) error {
         _, _ = s.db.ExecContext(ctx, `INSERT INTO activity_log(id,ts,entity_type,entity_id,action) VALUES (?,?,?,?,?)`, uuid.New().String(), time.Now().UTC().Format(time.RFC3339), "CARD", issueID, "DELETED")
     }
     return err
+}
+
+func (s *sqliteIssueService) ArchiveDoneIssues(ctx context.Context, boardID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+    // Шаг 0: Убедиться, что таблица архива существует.
+    _, err = tx.ExecContext(ctx, `
+        CREATE TABLE IF NOT EXISTS archived_issues (
+            id TEXT PRIMARY KEY,
+            board_id TEXT,
+            column_id TEXT,
+            type TEXT,
+            summary TEXT,
+            description TEXT,
+            priority TEXT,
+            labels TEXT,
+            due_date TEXT,
+            created_by_name TEXT,
+            assigned_to_name TEXT,
+            responsible_name TEXT,
+            note_id TEXT,
+            position INTEGER,
+            created_at TEXT,
+            updated_at TEXT,
+            archived_at TEXT NOT NULL
+        )`)
+    if err != nil {
+        return err
+    }
+
+	// 1. Найти ID колонок с названием "Done"
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM board_columns WHERE board_id=? AND name=?`, boardID, "Done")
+	if err != nil { return err }
+
+	var doneColumnIDs []interface{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil { rows.Close(); return err }
+		doneColumnIDs = append(doneColumnIDs, id)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil { return err }
+	if len(doneColumnIDs) == 0 { return nil } // Нечего архивировать
+
+	qMarks := strings.Repeat("?,", len(doneColumnIDs)-1) + "?"
+
+	// 2. Копировать задачи в `archived_issues`
+	// ПРИМЕЧАНИЕ: Эта таблица должна быть создана вручную.
+	// Ее структура должна совпадать с `issues` + поле `archived_at`
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO archived_issues (id, board_id, column_id, type, summary, description, priority, labels, due_date, created_by_name, assigned_to_name, responsible_name, note_id, position, created_at, updated_at, archived_at)
+		SELECT id, board_id, column_id, type, summary, description, priority, labels, due_date, created_by_name, assigned_to_name, responsible_name, note_id, position, created_at, updated_at, ?
+		FROM issues
+		WHERE column_id IN (`+qMarks+`)`, append([]interface{}{time.Now().UTC().Format(time.RFC3339)}, doneColumnIDs...)...)
+	if err != nil { return err }
+
+	// 3. Удалить исходные задачи
+	// 3. Удалить исходные задачи
+	_, err = tx.ExecContext(ctx, `DELETE FROM issues WHERE column_id IN (`+qMarks+`)`, doneColumnIDs...)
+	if err != nil { return err }
+
+	return tx.Commit()
+}
+
+func (s *sqliteIssueService) ListArchivedIssues(ctx context.Context) ([]bmodel.Issue, error) {
+    rows, err := s.db.QueryContext(ctx, `SELECT id,board_id,column_id,type,summary,description,priority,labels,due_date,created_by_name,assigned_to_name,responsible_name,note_id,position,created_at,updated_at FROM archived_issues ORDER BY archived_at DESC`)
+    if err!=nil { return nil, err }
+    defer rows.Close()
+    out := []bmodel.Issue{}
+    for rows.Next(){
+        var i bmodel.Issue
+        var desc,prio,labels,due,cb,as,res,note sql.NullString
+        var ca,ua string
+        if err:=rows.Scan(&i.ID,&i.BoardID,&i.ColumnID,&i.Type,&i.Summary,&desc,&prio,&labels,&due,&cb,&as,&res,&note,&i.Position,&ca,&ua); err!=nil { return nil, err }
+        if desc.Valid { i.Description=&desc.String }
+        if prio.Valid { i.Priority=&prio.String }
+        if labels.Valid { i.Labels=&labels.String }
+        if due.Valid { t,_:=time.Parse(time.RFC3339,due.String); i.DueDate=&t }
+        if cb.Valid { i.CreatedBy=&cb.String }
+        if as.Valid { i.AssignedTo=&as.String }
+        if res.Valid { i.Responsible=&res.String }
+        if note.Valid { i.NoteID=&note.String }
+        i.CreatedAt,_=time.Parse(time.RFC3339,ca)
+        i.UpdatedAt,_=time.Parse(time.RFC3339,ua)
+        out=append(out,i)
+    }
+    return out, nil
+}
+
+func (s *sqliteIssueService) DeleteArchivedIssue(ctx context.Context, issueID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM archived_issues WHERE id=?`, issueID)
+	return err
+}
+
+func (s *sqliteIssueService) GetArchivedIssue(ctx context.Context, issueID string) (bmodel.Issue, error) {
+    row := s.db.QueryRowContext(ctx, `SELECT id,board_id,column_id,type,summary,description,priority,labels,due_date,created_by_name,assigned_to_name,responsible_name,note_id,position,created_at,updated_at FROM archived_issues WHERE id=?`, issueID)
+    var i bmodel.Issue; var desc,prio,labels,due,cb,as,res,note sql.NullString; var ca,ua string
+    if err := row.Scan(&i.ID,&i.BoardID,&i.ColumnID,&i.Type,&i.Summary,&desc,&prio,&labels,&due,&cb,&as,&res,&note,&i.Position,&ca,&ua); err != nil { return bmodel.Issue{}, err }
+    if desc.Valid { i.Description=&desc.String }; if prio.Valid { i.Priority=&prio.String }; if labels.Valid { i.Labels=&labels.String }; if due.Valid { t,_:=time.Parse(time.RFC3339,due.String); i.DueDate=&t }; if cb.Valid { i.CreatedBy=&cb.String }; if as.Valid { i.AssignedTo=&as.String }; if res.Valid { i.Responsible=&res.String }; if note.Valid { i.NoteID=&note.String }
+    i.CreatedAt,_=time.Parse(time.RFC3339,ca); i.UpdatedAt,_=time.Parse(time.RFC3339,ua)
+    return i, nil
 }
 
 // Checklist

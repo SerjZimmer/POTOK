@@ -1,16 +1,20 @@
 package server
 
 import (
-    "encoding/json"
-    "log/slog"
-    "net/http"
+	"encoding/json"
+	"log/slog"
+	"net/http"
 
-    "github.com/gorilla/mux"
-    "potok/backend/internal/store"
-    calhttp "potok/backend/internal/calendar/http"
-    calsvc "potok/backend/internal/calendar/service"
-    boardhttp "potok/backend/internal/boards/http"
-    boardsvc "potok/backend/internal/boards/service"
+	boardhttp "potok/backend/internal/boards/http"
+	boardsvc "potok/backend/internal/boards/service"
+	calhttp "potok/backend/internal/calendar/http"
+	calsvc "potok/backend/internal/calendar/service"
+	mailhttp "potok/backend/internal/mail/http"
+	mailprovider "potok/backend/internal/mail/provider"
+	mailservice "potok/backend/internal/mail/service"
+	"potok/backend/internal/store"
+
+	"github.com/gorilla/mux"
 )
 
 // Server содержит зависимости для HTTP-сервера, такие как роутер и хранилище.
@@ -33,48 +37,60 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // configureRoutes настраивает все маршруты для API.
 func (s *Server) configureRoutes() {
-    // Маршруты для Папок
-    s.router.HandleFunc("/folders", s.handleGetFolders()).Methods("GET")
-    s.router.HandleFunc("/folders", s.handleCreateFolder()).Methods("POST")
-    s.router.HandleFunc("/folders/{folderId}", s.handleDeleteFolder()).Methods("DELETE") // New route
+	// Маршруты для Папок
+	s.router.HandleFunc("/folders", s.handleGetFolders()).Methods("GET")
+	s.router.HandleFunc("/folders", s.handleCreateFolder()).Methods("POST")
+	s.router.HandleFunc("/folders/{folderId}", s.handleDeleteFolder()).Methods("DELETE") // New route
 
 	// Маршруты для Заметок
 	s.router.HandleFunc("/folders/{folderId}/notes", s.handleListNotes()).Methods("GET")
 	s.router.HandleFunc("/notes", s.handleListAllNotes()).Methods("GET") // New route
 	s.router.HandleFunc("/notes", s.handleCreateNote()).Methods("POST")
 	s.router.HandleFunc("/notes/{noteId}", s.handleUpdateNote()).Methods("PUT")
-    s.router.HandleFunc("/notes/{noteId}", s.handleDeleteNote()).Methods("DELETE")
+	s.router.HandleFunc("/notes/{noteId}", s.handleDeleteNote()).Methods("DELETE")
 
-    // Health endpoints
-    s.router.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }).Methods("GET")
-    s.router.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }).Methods("GET")
+	// Health endpoints
+	s.router.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }).Methods("GET")
+	s.router.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }).Methods("GET")
 
-    // Calendar API — chi router mounted under its prefixes
-    calRouter := calhttp.NewRouterWithServices(
-        calsvc.NewSQLiteCalendarService(s.store.DB()),
-        calsvc.NewSQLiteEventService(s.store.DB()),
-        calsvc.NoopReminderService{},
-        calsvc.NoopSyncService{},
-    )
-    // Boards API — chi router
-    boardRouter := boardhttp.NewRouter(
-        boardsvc.NewSQLiteBoardService(s.store.DB()),
-        boardsvc.NewSQLiteIssueService(s.store.DB()),
-    )
+	// Calendar API — chi router mounted under its prefixes
+	calRouter := calhttp.NewRouterWithServices(
+		calsvc.NewSQLiteCalendarService(s.store.DB()),
+		calsvc.NewSQLiteEventService(s.store.DB()),
+		calsvc.NoopReminderService{},
+		calsvc.NoopSyncService{},
+	)
+	// Boards API — chi router
+	boardRouter := boardhttp.NewRouter(
+		boardsvc.NewSQLiteBoardService(s.store.DB()),
+		boardsvc.NewSQLiteIssueService(s.store.DB()),
+	)
 
-    // Mount specific prefixes to avoid a greedy catch-all
-    // Calendar
-    s.router.PathPrefix("/v1/calendars").Handler(calRouter)
-    s.router.PathPrefix("/v1/events").Handler(calRouter)
-    s.router.PathPrefix("/v1/sync").Handler(calRouter)
-    s.router.PathPrefix("/v1/import").Handler(calRouter)
-    s.router.PathPrefix("/v1/export").Handler(calRouter)
-    // Boards
-    s.router.PathPrefix("/v1/boards").Handler(boardRouter)
-    s.router.PathPrefix("/v1/issues").Handler(boardRouter)
-    s.router.PathPrefix("/v1/cards").Handler(boardRouter)
-    s.router.PathPrefix("/v1/comments").Handler(boardRouter)
-    s.router.PathPrefix("/v1/checklist_items").Handler(boardRouter)
+	// Mail API — chi router
+	mailProviderFactory := mailprovider.NewProviderFactory()
+	mailRouter := mailhttp.NewRouter(
+		mailservice.NewAccountService(mailProviderFactory),
+		mailservice.NewThreadService(mailProviderFactory),
+		mailservice.NewSendService(mailProviderFactory),
+	)
+
+	// Mount specific prefixes to avoid a greedy catch-all
+	// Calendar
+	s.router.PathPrefix("/v1/calendars").Handler(calRouter)
+	s.router.PathPrefix("/v1/events").Handler(calRouter)
+	s.router.PathPrefix("/v1/sync").Handler(calRouter)
+	s.router.PathPrefix("/v1/import").Handler(calRouter)
+	s.router.PathPrefix("/v1/export").Handler(calRouter)
+	// Boards
+	s.router.PathPrefix("/v1/boards").Handler(boardRouter)
+	s.router.PathPrefix("/v1/issues").Handler(boardRouter)
+	s.router.PathPrefix("/v1/cards").Handler(boardRouter)
+	s.router.PathPrefix("/v1/comments").Handler(boardRouter)
+	s.router.PathPrefix("/v1/checklist_items").Handler(boardRouter)
+	s.router.PathPrefix("/v1/archive").Handler(boardRouter)
+
+	// Mail
+	s.router.PathPrefix("/v1/mail").Handler(mailRouter)
 }
 
 // New handler to delete a folder and its notes
@@ -105,7 +121,7 @@ func (s *Server) handleListAllNotes() http.HandlerFunc {
 		slog.Info("Запрос списка всех заметок",
 			"path", r.URL.Path, "method", r.Method)
 
-		sortBy := r.URL.Query().Get("sort_by") // Get sort_by query parameter
+		sortBy := r.URL.Query().Get("sort_by")     // Get sort_by query parameter
 		notes, err := s.store.ListAllNotes(sortBy) // Pass sortBy to store method
 		if err != nil {
 			slog.Error("Не удалось получить все заметки",

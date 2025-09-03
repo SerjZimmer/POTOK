@@ -186,7 +186,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
           child: Wrap(
             children: <Widget>[
               ListTile(
-                leading: const Icon(Icons.edit, color: Colors.amber),
+                leading: const Icon(Icons.edit_outlined, color: Colors.amber),
                 title: const Text('Переименовать папку', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(bc); // Close bottom sheet
@@ -194,7 +194,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete, color: Colors.amber),
+                leading: const Icon(Icons.delete_outline, color: Colors.amber),
                 title: const Text('Удалить папку', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(bc); // Close bottom sheet
@@ -202,7 +202,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.sort, color: Colors.amber),
+                leading: const Icon(Icons.sort_outlined, color: Colors.amber),
                 title: const Text('Сортировать заметки', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(bc); // Close bottom sheet
@@ -329,7 +329,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
             child: ListView(
               children: <Widget>[
                 ListTile(
-                  leading: const Icon(Icons.folder_open, color: Colors.amber),
+                  leading: const Icon(Icons.folder_open_outlined, color: Colors.amber),
                   title: Text('Все заметки (${_allNotes.length})', style: const TextStyle(fontSize: 16)),
                   onTap: () {
                     setState(() {
@@ -340,7 +340,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                 ),
                 const Divider(),
                 ..._folders.map((folder) => ListTile(
-                  leading: const Icon(Icons.folder, color: Colors.amber),
+                  leading: const Icon(Icons.folder_outlined, color: Colors.amber),
                   title: Text('${folder.name} (${_getNoteCountForFolder(folder.id)})', style: const TextStyle(fontSize: 16)),
                   trailing: IconButton( // Options icon
                     icon: Container(
@@ -349,7 +349,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                         shape: BoxShape.circle,
                       ),
                       padding: const EdgeInsets.all(4.0),
-                      child: const Icon(Icons.more_horiz, color: Colors.amber), // Ellipsis icon
+                      child: const Icon(Icons.more_horiz_outlined, color: Colors.amber), // Ellipsis icon
                     ),
                     onPressed: () {
                       // Show options menu
@@ -364,7 +364,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                   },
                 )).toList(),
                 ListTile(
-                  leading: const Icon(Icons.create_new_folder, color: Colors.amber),
+                  leading: const Icon(Icons.create_new_folder_outlined, color: Colors.amber),
                   title: const Text('Создать новую папку', style: TextStyle(fontSize: 16)),
                   onTap: () {
                     _showCreateFolderDialog();
@@ -389,7 +389,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                   backgroundColor: Colors.amber, // Gold background
                   foregroundColor: Colors.black, // Black icon
                   shape: const CircleBorder(),
-                  child: const Icon(Icons.note_add), // Changed icon to note_add
+                  child: const Icon(Icons.note_add_outlined), // Changed icon to note_add
                 ),
                 body: _displayedNotes.isEmpty
                     ? Center(
@@ -407,7 +407,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                                 backgroundColor: Colors.amber, // Gold background
                                 foregroundColor: Colors.black, // Black text/icon
                               ),
-                              icon: const Icon(Icons.add),
+                              icon: const Icon(Icons.add_circle_outline),
                               label: const Text('Создать заметку'),
                             ),
                             if (_selectedFolderId == null) // Only show "Create Folder" if "All Notes" is selected
@@ -419,7 +419,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                                   backgroundColor: Colors.amber, // Gold background
                                   foregroundColor: Colors.black, // Black text/icon
                                 ),
-                                icon: const Icon(Icons.create_new_folder),
+                                icon: const Icon(Icons.create_new_folder_outlined),
                                 label: const Text('Создать папку'),
                               ),
                           ],
@@ -437,7 +437,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                               color: Colors.red,
                               alignment: Alignment.centerRight,
                               padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                              child: const Icon(Icons.delete, color: Colors.white),
+                              child: const Icon(Icons.delete_outline, color: Colors.white),
                             ),
                             onDismissed: (direction) async {
                               final deletedNoteId = note.id;
@@ -456,7 +456,7 @@ class _NotesMasterDetailScreenState extends State<NotesMasterDetailScreen> {
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                               title: Text(note.title, style: const TextStyle(fontWeight: FontWeight.w500)),
                               subtitle: Text(note.content, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white)),
-                              trailing: const Icon(Icons.arrow_forward_ios, size: 16.0, color: Colors.amber),
+                              trailing: const Icon(Icons.arrow_forward_ios_outlined, size: 16.0, color: Colors.amber),
                               onTap: () {
                                 _updateNote(note);
                               },

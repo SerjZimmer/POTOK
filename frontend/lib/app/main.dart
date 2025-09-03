@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:frontend/notes_master_detail_screen.dart';
 import 'package:frontend/features/calendar/presentation/calendar_screen.dart';
 import 'package:frontend/features/boards/presentation/boards_list_screen.dart';
+import 'package:frontend/features/mail/presentation/mail_screen.dart';
 import 'package:frontend/src/services/note_service.dart';
 import 'package:frontend/src/services/folder_service.dart';
 import 'package:frontend/features/calendar/data/api_repository.dart';
@@ -23,11 +24,19 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
 
   @override
+  void initState() {
+    super.initState();
+    // По умолчанию открываем заметки
+    _index = 0;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
       NotesMasterDetailScreen(noteService: widget.noteService, folderService: widget.folderService,),
       CalendarScreen(repo: ApiCalendarRepository()),
       const BoardsListScreen(),
+      const MailScreen(),
     ];
 
     return Scaffold(
@@ -42,18 +51,23 @@ class _AppShellState extends State<AppShell> {
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.note_outlined),
-            selectedIcon: Icon(Icons.note),
+            selectedIcon: Icon(Icons.note_outlined),
             label: 'Заметки',
           ),
           NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month),
+            selectedIcon: Icon(Icons.calendar_month_outlined),
             label: 'Календарь',
           ),
           NavigationDestination(
             icon: Icon(Icons.view_kanban_outlined),
-            selectedIcon: Icon(Icons.view_kanban),
+            selectedIcon: Icon(Icons.view_kanban_outlined),
             label: 'Доски',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.mail_outlined),
+            selectedIcon: Icon(Icons.mail_outlined),
+            label: 'Почта',
           ),
         ],
       ),

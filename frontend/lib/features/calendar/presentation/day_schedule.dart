@@ -110,7 +110,7 @@ class _DaySchedulePageState extends State<DaySchedulePage> {
           );
           if (saved == true) _reload();
         },
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add_circle_outline),
       ),
     );
   }
