@@ -42,7 +42,7 @@ class _BoardsListScreenState extends State<BoardsListScreen>{
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Удалить доску?'),
-        content: Text('Вы уверены, что хотите удалить доску \"$name\"? Это действие нельзя отменить.'),
+        content: Text('Вы уверены, что хотите удалить доску "$name"?\n\nВсе ее колонки и задачи будут также удалены. Это действие нельзя отменить.'),
         actions: [
           TextButton(onPressed: ()=>Navigator.pop(ctx, false), child: const Text('Отмена')),
           TextButton(onPressed: ()=>Navigator.pop(ctx, true), child: const Text('Удалить'), style: TextButton.styleFrom(foregroundColor: Colors.red)),
