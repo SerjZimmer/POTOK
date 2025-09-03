@@ -22,20 +22,25 @@ class BoardsApiRepository {
     return data;
   }
 
-  Future<Map<String, dynamic>> createBoard(String name, String type) async {
-    BoardsLogger.info('Создание доски', ctx: {'name': name, 'type': type});
-    final res = await _c().post(
+    Future<Map<String, dynamic>> createBoard(String name, String type) async {
+    final response = await http.post(
       Uri.parse('$baseUrl/v1/boards'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({'name': name, 'type': type}),
+      body: jsonEncode({'name': name, 'type': type}),
     );
-    if (res.statusCode != 201) {
-      BoardsLogger.error('Не удалось создать доску', ctx: {'status': res.statusCode, 'body': res.body});
-      throw Exception('createBoard ${res.statusCode}: ${res.body}');
+    if (response.statusCode == 201) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to create board');
     }
-    final data = json.decode(res.body);
-    BoardsLogger.info('Доска создана', ctx: {'id': data['id']});
-    return data;
+  }
+
+  Future<void> deleteBoard(String boardId) async {
+    final response = await http.delete(Uri.parse('$baseUrl/v1/boards/$boardId'));
+    if (response.statusCode != 204) {
+      // 204 No Content — успешный ответ для DELETE
+      throw Exception('Failed to delete board. Status: ${response.statusCode}');
+    }
   }
 
   // Columns

@@ -36,6 +36,8 @@ type BoardService interface {
     UpdateColumn(ctx context.Context, columnID string, name *string, wip *int) error
     // DeleteColumn — удалить колонку (каскадно удалит задачи по FK).
     DeleteColumn(ctx context.Context, columnID string) error
+    // DeleteBoard — удалить доску со всеми колонками и задачами.
+    DeleteBoard(ctx context.Context, boardID string) error
     // ReorderColumns — массовое обновление позиций.
     ReorderColumns(ctx context.Context, boardID string, orders map[string]int) error
     // People directory per board
@@ -145,6 +147,60 @@ func (s *sqliteBoardService) UpdateColumn(ctx context.Context, columnID string, 
 func (s *sqliteBoardService) DeleteColumn(ctx context.Context, columnID string) error {
     _, err := s.db.ExecContext(ctx, `DELETE FROM board_columns WHERE id=?`, columnID)
     return err
+}
+
+func (s *sqliteBoardService) DeleteBoard(ctx context.Context, boardID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() // Rollback on error in case of panic
+
+	// Сначала найдём все ID задач (issues), чтобы удалить связанные с ними данные.
+	var issueIDs []string
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM issues WHERE board_id=?`, boardID)
+	if err != nil {
+		return err
+	}
+	// Важно итерироваться по всем результатам и закрыть rows перед следующими запросами в транзакции.
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		issueIDs = append(issueIDs, id)
+	}
+	rows.Close() // Закрываем rows досрочно.
+
+	if len(issueIDs) > 0 {
+		// Генерируем плейсхолдеры для IN (...)
+		qMarks := strings.Repeat("?,", len(issueIDs)-1) + "?"
+		args := make([]interface{}, len(issueIDs))
+		for i, id := range issueIDs {
+			args[i] = id
+		}
+
+		// Удаляем все данные, связанные с задачами
+		if _, err := tx.ExecContext(ctx, `DELETE FROM issue_tags WHERE issue_id IN (`+qMarks+`)`, args...); err != nil { return err }
+		if _, err := tx.ExecContext(ctx, `DELETE FROM issue_comments WHERE issue_id IN (`+qMarks+`)`, args...); err != nil { return err }
+		if _, err := tx.ExecContext(ctx, `DELETE FROM issue_checklist_items WHERE issue_id IN (`+qMarks+`)`, args...); err != nil { return err }
+		if _, err := tx.ExecContext(ctx, `DELETE FROM issue_field_values WHERE issue_id IN (`+qMarks+`)`, args...); err != nil { return err }
+		if _, err := tx.ExecContext(ctx, `DELETE FROM activity_log WHERE entity_type='CARD' AND entity_id IN (`+qMarks+`)`, args...); err != nil { return err }
+	}
+
+	// Удаляем данные, напрямую связанные с доской
+	if _, err := tx.ExecContext(ctx, `DELETE FROM issues WHERE board_id=?`, boardID); err != nil { return err }
+	if _, err := tx.ExecContext(ctx, `DELETE FROM board_columns WHERE board_id=?`, boardID); err != nil { return err }
+	if _, err := tx.ExecContext(ctx, `DELETE FROM board_people WHERE board_id=?`, boardID); err != nil { return err }
+	if _, err := tx.ExecContext(ctx, `DELETE FROM board_fields WHERE board_id=?`, boardID); err != nil { return err }
+	if _, err := tx.ExecContext(ctx, `DELETE FROM board_notifications WHERE board_id=?`, boardID); err != nil { return err }
+	if _, err := tx.ExecContext(ctx, `DELETE FROM board_priorities WHERE board_id=?`, boardID); err != nil { return err }
+
+	// Наконец, удаляем саму доску
+	if _, err := tx.ExecContext(ctx, `DELETE FROM boards WHERE id=?`, boardID); err != nil { return err }
+
+	return tx.Commit()
 }
 
 func (s *sqliteBoardService) ReorderColumns(ctx context.Context, boardID string, orders map[string]int) error {

@@ -23,13 +23,41 @@ class _BoardsListScreenState extends State<BoardsListScreen>{
           leading: Icon(b['type']=='scrum'? Icons.view_agenda : Icons.view_kanban, color: Colors.amber),
           title: Text(b['name']??'—'),
           subtitle: Text(b['type']??'kanban'),
-          onTap: (){ BoardsLogger.info('Открытие доски', ctx: {'id': b['id'], 'name': b['name']}); Navigator.of(context).push(MaterialPageRoute(builder: (_)=> KanbanBoardScreen(board: b))); },
+          onTap: (){ BoardsLogger.info('Открытие доски', ctx: {'id': b['id'], 'name': b['name']}); Navigator.of(context).push(MaterialPageRoute(builder: (_)=> KanbanBoardScreen(board: b))).then((_)=>_load()); },
+          trailing: IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            tooltip: 'Удалить доску',
+            onPressed: () => _confirmDelete(b['id'], b['name']??'--'),
+          ),
         ); },
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async { BoardsLogger.info('Открытие диалога создания доски'); await _createBoard(); await _load(); }, child: const Icon(Icons.add),
       ),
     );
+  }
+
+  Future<void> _confirmDelete(String id, String name) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить доску?'),
+        content: Text('Вы уверены, что хотите удалить доску \"$name\"? Это действие нельзя отменить.'),
+        actions: [
+          TextButton(onPressed: ()=>Navigator.pop(ctx, false), child: const Text('Отмена')),
+          TextButton(onPressed: ()=>Navigator.pop(ctx, true), child: const Text('Удалить'), style: TextButton.styleFrom(foregroundColor: Colors.red)),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await repo.deleteBoard(id);
+      BoardsLogger.info('Доска удалена', ctx: {'id': id});
+      await _load();
+    } catch (e) {
+      BoardsLogger.error('Не удалось удалить доску', error: e, ctx: {'id': id});
+      if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red));
+    }
   }
   Future<void> _createBoard() async {
     String name=''; String type='kanban';

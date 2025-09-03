@@ -39,6 +39,7 @@ func NewRouter(boards bsvc.BoardService, issues bsvc.IssueService) http.Handler 
     api := &Router{boards: boards, issues: issues}
     r.Get("/v1/boards", api.listBoards)        // Список досок
     r.Post("/v1/boards", api.createBoard)
+    r.Delete("/v1/boards/{boardId}", api.deleteBoard)
     r.Get("/v1/boards/{boardId}/columns", api.listColumns)
     r.Post("/v1/boards/{boardId}/columns", api.addColumn)
     r.Patch("/v1/columns/{id}", api.patchColumn)
@@ -84,6 +85,7 @@ func NewRouter(boards bsvc.BoardService, issues bsvc.IssueService) http.Handler 
 
 func (rt *Router) listBoards(w http.ResponseWriter, r *http.Request){ items, _ := rt.boards.List(r.Context()); respond(w, http.StatusOK, items) }
 func (rt *Router) createBoard(w http.ResponseWriter, r *http.Request){ var req struct{ Name string `json:"name"`; Type string `json:"type"`}; _=json.NewDecoder(r.Body).Decode(&req); b,err:=rt.boards.Create(r.Context(), req.Name, req.Type); if err!=nil{ http.Error(w, err.Error(), 400); return }; respond(w, http.StatusCreated, b) }
+func (rt *Router) deleteBoard(w http.ResponseWriter, r *http.Request){ id := chi.URLParam(r, "boardId"); if err := rt.boards.DeleteBoard(r.Context(), id); err != nil { http.Error(w, err.Error(), http.StatusInternalServerError); return }; w.WriteHeader(http.StatusNoContent) }
 func (rt *Router) listColumns(w http.ResponseWriter, r *http.Request){ id:=chi.URLParam(r,"boardId"); items,_ := rt.boards.ListColumns(r.Context(), id); respond(w, http.StatusOK, items) }
 func (rt *Router) addColumn(w http.ResponseWriter, r *http.Request){ id:=chi.URLParam(r,"boardId"); var req struct{ Name string `json:"name"`; Wip *int `json:"wipLimit"`}; _=json.NewDecoder(r.Body).Decode(&req); c,err := rt.boards.AddColumn(r.Context(), id, req.Name, req.Wip); if err!=nil{ http.Error(w, err.Error(), 400); return }; respond(w, http.StatusCreated, c) }
 func (rt *Router) listIssues(w http.ResponseWriter, r *http.Request){
